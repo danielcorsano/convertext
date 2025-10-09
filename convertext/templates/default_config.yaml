@@ -1,0 +1,79 @@
+# ConvertExt Configuration File
+
+# Output settings
+output:
+  directory: null              # null = same as source directory
+  filename_pattern: "{name}.{ext}"  # {name}, {ext}, {format}
+  overwrite: false
+  preserve_structure: true     # Keep folder hierarchy in batch mode
+  create_backup: false
+
+# General conversion options
+conversion:
+  quality: medium              # low/medium/high
+  preserve_metadata: true      # Author, title, etc.
+  preserve_formatting: true    # Bold, italic, etc.
+  preserve_images: true
+  extract_toc: true            # Table of contents
+
+# Text/Document options
+documents:
+  encoding: utf-8
+  embed_fonts: true
+  font_fallback: "Liberation Sans"
+  image_quality: 85            # JPEG quality 1-100
+  dpi: 300                     # For image extraction
+
+  pdf:
+    compression: true
+    optimize: true
+    linearize: false           # Fast web view
+    pdf_version: "1.7"
+
+  docx:
+    style_preservation: true
+    embed_images: true
+
+  odt:
+    style_preservation: true
+
+# Ebook options
+ebooks:
+  epub:
+    version: 3                 # 2 or 3
+    split_chapters: true
+    toc_depth: 3
+    cover_auto_detect: true
+    stylesheet: null           # Path to custom CSS
+
+  mobi:
+    compression_level: 1       # 0-2
+    prefer_azw3: true          # Use AZW3 over MOBI when possible
+
+  fb2:
+    validation: true
+    include_binary_images: true
+
+# Comic book options
+comics:
+  image_format: "jpeg"         # jpeg/png/webp
+  image_quality: 90
+  max_image_width: 2048
+  max_image_height: 2048
+  preserve_order: true
+
+# Processing options
+processing:
+  parallel: true               # Process multiple files in parallel
+  max_workers: 4               # CPU cores to use
+  temp_dir: null               # null = system temp
+  cleanup_temp: true
+  chunk_size: 4096             # Buffer size for file operations
+
+# Logging
+logging:
+  level: INFO                  # DEBUG/INFO/WARNING/ERROR/CRITICAL
+  file: null                   # null = stdout only
+  format: "%(levelname)s: %(message)s"
+  verbose: false               # Show detailed progress
+  show_progress: true          # Progress bars
