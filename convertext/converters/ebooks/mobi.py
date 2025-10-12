@@ -22,14 +22,46 @@ class MobiConverter(BaseConverter):
         return source in self.input_formats and target in self.output_formats
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
-        """Convert MOBI/AZW to target format."""
-        try:
-            import mobi
-        except ImportError:
-            raise ImportError(
-                "MOBI support requires 'mobi' package. "
-                "Install with: pip install convertext[mobi] or poetry install --extras mobi"
+        """Convert MOBI/AZW to target format using Calibre."""
+        import shutil
+        import subprocess
+        import tempfile
+
+        # Use Calibre's ebook-convert for MOBI reading
+        ebook_convert = shutil.which('ebook-convert')
+        if not ebook_convert:
+            raise RuntimeError(
+                "MOBI/AZW reading requires Calibre's 'ebook-convert'. "
+                "Install Calibre: https://calibre-ebook.com/download"
             )
+
+        # Convert MOBI → EPUB first, then read EPUB
+        with tempfile.NamedTemporaryFile(suffix='.epub', delete=False) as tmp:
+            tmp_epub = Path(tmp.name)
+
+        try:
+            # Convert to EPUB using Calibre
+            result = subprocess.run(
+                [ebook_convert, str(source_path), str(tmp_epub)],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+
+            if result.returncode != 0 or not tmp_epub.exists():
+                raise RuntimeError(f"MOBI conversion failed: {result.stderr}")
+
+            # Now read the EPUB and convert to target
+            from convertext.converters.ebooks.epub import EpubConverter
+            epub_converter = EpubConverter()
+            success = epub_converter.convert(tmp_epub, target_path, config)
+
+            return success
+
+        finally:
+            # Cleanup temp file
+            if tmp_epub.exists():
+                tmp_epub.unlink()
 
         doc = self._read_mobi(source_path, config)
 
@@ -43,48 +75,6 @@ class MobiConverter(BaseConverter):
 
         return False
 
-    def _read_mobi(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read MOBI into intermediate Document."""
-        import mobi
-        from bs4 import BeautifulSoup
-
-        doc = Document()
-
-        # Extract MOBI content
-        tempdir, filepath = mobi.extract(str(path))
-
-        try:
-            # Read the extracted HTML content
-            html_file = Path(tempdir) / filepath
-            if html_file.exists():
-                with open(html_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-
-                soup = BeautifulSoup(content, 'html.parser')
-
-                # Extract metadata from MOBI header if available
-                title_tag = soup.find('title')
-                if title_tag:
-                    doc.metadata['title'] = title_tag.get_text()
-
-                # Parse content
-                for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-                    if element.name.startswith('h'):
-                        level = int(element.name[1])
-                        text = element.get_text().strip()
-                        if text:
-                            doc.add_heading(text, level)
-                    elif element.name == 'p':
-                        text = element.get_text().strip()
-                        if text:
-                            doc.add_paragraph(text)
-        finally:
-            # Cleanup temp directory
-            import shutil
-            if Path(tempdir).exists():
-                shutil.rmtree(tempdir, ignore_errors=True)
-
-        return doc
 
     def _write_txt(self, doc: Document, path: Path) -> bool:
         """Write Document to plain text."""

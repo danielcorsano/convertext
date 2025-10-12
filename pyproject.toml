@@ -32,12 +32,6 @@ pillow = "^11.3.0"
 lxml = "^6.0.2"
 beautifulsoup4 = "^4.14.2"
 
-[tool.poetry.group.mobi]
-optional = true
-
-[tool.poetry.group.mobi.dependencies]
-mobi = "^0.3.3"
-
 [tool.poetry.group.rtf]
 optional = true
 

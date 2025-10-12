@@ -10,8 +10,9 @@ Convert between document and ebook formats with a single command. No Calibre, no
 ## Features
 
 - 🚀 **Fast & Lightweight** - Core package < 15MB, no system dependencies
-- 📚 **Multiple Formats** - Documents (PDF, DOCX, HTML, MD, TXT, RTF) and Ebooks (EPUB)
+- 📚 **Multiple Formats** - Documents (PDF, DOCX, ODT, HTML, MD, TXT, RTF) and Ebooks (EPUB, MOBI, AZW3, FB2)
 - 🔄 **Batch Processing** - Convert multiple files at once with glob patterns
+- 🔗 **Multi-Hop Conversion** - Automatically chains conversions (e.g., PDF → HTML → EPUB)
 - ⚙️ **Highly Configurable** - YAML config with priority merging
 - 🎯 **Simple CLI** - Intuitive command-line interface
 - 🔍 **Metadata Preservation** - Keeps author, title, and document properties
@@ -29,9 +30,14 @@ pip install convertext
 # RTF support
 pip install convertext[rtf]
 
+# MOBI/AZW support
+pip install convertext[mobi]
+
 # All optional formats
 pip install convertext[all]
 ```
+
+**Note**: MOBI/AZW3 writing requires Calibre or kindlegen installed separately.
 
 ### From Source
 ```bash
@@ -43,14 +49,17 @@ poetry install
 ## Quick Start
 
 ```bash
-# Convert a PDF to EPUB
+# Convert a PDF to EPUB (multi-hop: PDF → TXT → EPUB)
 convertext book.pdf --format epub
 
-# Convert Markdown to HTML and PDF
-convertext document.md --format html,pdf
+# Convert Markdown to HTML and EPUB
+convertext document.md --format html,epub
 
 # Batch convert all Word docs to Markdown
 convertext *.docx --format md
+
+# Convert PDF to Kindle format (multi-hop: PDF → TXT → EPUB → MOBI)
+convertext book.pdf --format mobi
 
 # See all supported formats
 convertext --list-formats
@@ -113,11 +122,17 @@ convertext book.md --format epub --config my-config.yaml
 convertext document.pdf --format epub --quality high
 ```
 
-### Working with EPUBs
+### Working with Ebooks
 
 ```bash
 # Create EPUB from Markdown (with chapters)
 convertext book.md --format epub
+
+# Convert EPUB to Kindle format
+convertext ebook.epub --format mobi
+
+# Convert any document to multiple ebook formats
+convertext document.pdf --format epub,mobi,fb2 --verbose
 
 # Convert EPUB to text for reading
 convertext ebook.epub --format txt
@@ -132,34 +147,43 @@ convertext ebook.epub --format html
 
 | Input Format | Output Formats | Notes |
 |-------------|----------------|-------|
-| **PDF** | TXT, HTML, MD | Extracts text and metadata |
-| **DOCX/DOC** | TXT, HTML, MD | Preserves headings and structure |
-| **RTF** | TXT, HTML, MD | Requires `striprtf` extra |
-| **TXT** | HTML, MD, EPUB | Plain text with paragraph detection |
-| **Markdown** | HTML, TXT, EPUB | Full markdown support |
-| **HTML** | TXT, MD, EPUB | Extracts content from web pages |
-| **EPUB** | TXT, HTML, MD | Extracts ebook content |
+| **PDF** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Extracts text and metadata |
+| **DOCX/DOC** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Preserves headings and structure |
+| **ODT** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | OpenDocument Text format |
+| **RTF** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Requires `striprtf` extra |
+| **TXT** | HTML, MD, EPUB, FB2 | Plain text with paragraph detection |
+| **Markdown** | HTML, TXT, EPUB, FB2 | Full markdown support |
+| **HTML** | TXT, MD, EPUB, FB2 | Extracts content from web pages |
+| **EPUB** | TXT, HTML, MD, MOBI, AZW3 | Extracts/converts ebook content |
+| **MOBI** | TXT, HTML, MD | Kindle format (requires `mobi` extra) |
+| **AZW/AZW3** | TXT, HTML, MD | Kindle formats (requires `mobi` extra) |
+| **FB2** | TXT, HTML, MD | FictionBook 2.0 format |
+
+\* Via multi-hop conversion (automatic)
+
+### Multi-Hop Conversion
+
+ConvertExt automatically finds conversion paths for unsupported direct conversions:
+
+```bash
+# PDF → EPUB: Automatically converts via PDF → TXT → EPUB (2 hops)
+convertext book.pdf --format epub --verbose
+# Output: ✓ book.pdf → book.epub (PDF → TXT → EPUB, 2 hops)
+
+# PDF → MOBI: Automatically converts via PDF → TXT → EPUB → MOBI (3 hops)
+convertext book.pdf --format mobi --verbose
+# Output: ✓ book.pdf → book.mobi (PDF → TXT → EPUB → MOBI, 3 hops)
+
+# Keep intermediate files for debugging
+convertext book.pdf --format epub --keep-intermediate
+# Creates: book_intermediate.txt, book.epub
+```
+
+**How it works**: Uses BFS pathfinding to find the shortest conversion chain (max 3 hops). Intermediate files are automatically cleaned up unless `--keep-intermediate` is specified.
 
 ### Format Matrix
 
-```
-convertext --list-formats
-```
-Output:
-```
-Supported format conversions:
-
-  DOC → HTML, MD, TXT
-  DOCX → HTML, MD, TXT
-  EPUB → HTML, MD, TXT
-  HTM → EPUB, MD, TXT
-  HTML → EPUB, MD, TXT
-  MARKDOWN → HTML, TXT
-  MD → EPUB, HTML, TXT
-  PDF → HTML, MD, TXT
-  RTF → HTML, MD, TXT
-  TXT → EPUB, HTML, MD
-```
+Run `convertext --list-formats` to see all direct conversions. Multi-hop enables any-to-any conversion between compatible formats.
 
 ## Configuration
 
@@ -259,7 +283,8 @@ Options:
   --list-formats               List all supported formats
   --init-config                Initialize user config file
   --version                    Show version
-  -v, --verbose                Verbose output
+  -v, --verbose                Verbose output (shows conversion hops)
+  --keep-intermediate          Keep intermediate files in multi-hop conversions
   --help                       Show help message
 ```
 
@@ -387,14 +412,16 @@ documents:
 
 ## Roadmap
 
-- [ ] ODT (OpenDocument) support
-- [ ] MOBI/AZW3 ebook formats
+- [x] Multi-hop conversions (PDF → HTML → EPUB)
+- [x] MOBI/AZW3 ebook formats
+- [x] ODT (OpenDocument) support
+- [x] FB2 (FictionBook) format
 - [ ] Comic book formats (CBZ, CBR)
 - [ ] Apple Pages format
-- [ ] Multi-hop conversions (e.g., PDF → HTML → EPUB)
 - [ ] Custom CSS for HTML/EPUB output
 - [ ] Image optimization options
 - [ ] OCR support for scanned PDFs
+- [ ] Parallel processing for batch conversions
 
 ## Contributing
 
