@@ -2,11 +2,11 @@
 name = "convertext"
 version = "0.1.0"
 description = "Lightweight universal text converter"
-authors = ["dcrsn"]
+authors = ["danielcorsano"]
 readme = "README.md"
 license = "MIT"
-homepage = "https://github.com/dcrsn/convertext"
-repository = "https://github.com/dcrsn/convertext"
+homepage = "https://github.com/danielcorsano/convertext"
+repository = "https://github.com/danielcorsano/convertext"
 keywords = ["conversion", "ebook", "pdf", "epub", "mobi", "docx", "document"]
 classifiers = [
     "Development Status :: 3 - Alpha",

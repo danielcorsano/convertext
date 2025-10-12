@@ -35,7 +35,7 @@ pip install convertext[all]
 
 ### From Source
 ```bash
-git clone https://github.com/dcrsn/convertext.git
+git clone https://github.com/danielcorsano/convertext.git
 cd convertext
 poetry install
 ```
@@ -333,7 +333,7 @@ This allows any-to-any conversions without N² converter implementations.
 
 ### Setup
 ```bash
-git clone https://github.com/dcrsn/convertext.git
+git clone https://github.com/danielcorsano/convertext.git
 cd convertext
 poetry install
 ```
@@ -413,7 +413,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Credits
 
-Created by [dcrsn](https://github.com/dcrsn)
+Created by [danielcorsano](https://github.com/danielcorsano)
 
 Built with:
 - [Click](https://click.palletsprojects.com/) - CLI framework
@@ -425,6 +425,6 @@ Built with:
 
 ## Support
 
-- 📖 [Documentation](https://github.com/dcrsn/convertext)
-- 🐛 [Issue Tracker](https://github.com/dcrsn/convertext/issues)
-- 💬 [Discussions](https://github.com/dcrsn/convertext/discussions)
+- 📖 [Documentation](https://github.com/danielcorsano/convertext)
+- 🐛 [Issue Tracker](https://github.com/danielcorsano/convertext/issues)
+- 💬 [Discussions](https://github.com/danielcorsano/convertext/discussions)
