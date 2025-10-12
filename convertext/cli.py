@@ -58,6 +58,11 @@ from convertext.converters.loader import load_converters
     is_flag=True,
     help='Verbose output'
 )
+@click.option(
+    '--keep-intermediate',
+    is_flag=True,
+    help='Keep intermediate files in multi-hop conversions'
+)
 def main(
     files: tuple,
     output_formats: Optional[str],
@@ -68,7 +73,8 @@ def main(
     list_formats: bool,
     init_config: bool,
     version: bool,
-    verbose: bool
+    verbose: bool,
+    keep_intermediate: bool
 ):
     """ConvertExt - Lightweight universal text converter."""
 
@@ -122,7 +128,7 @@ def main(
         cfg.override(overrides)
 
     formats = [f.strip().lower() for f in output_formats.split(',')]
-    engine = ConversionEngine(cfg)
+    engine = ConversionEngine(cfg, keep_intermediate=keep_intermediate)
     source_files = [Path(f) for f in files]
     success_count = 0
     fail_count = 0
@@ -138,11 +144,15 @@ def main(
                 if result.success:
                     success_count += 1
                     if verbose:
-                        click.echo(f"\n✓ {source} → {result.target_path}")
+                        hop_info = ""
+                        if result.hops > 1 and result.conversion_path:
+                            path_str = " → ".join(f.upper() for f in result.conversion_path)
+                            hop_info = f" ({path_str}, {result.hops} hops)"
+                        click.echo(f"\n✓ {source.name} → {result.target_path.name}{hop_info}")
                 else:
                     fail_count += 1
                     if verbose:
-                        click.echo(f"\n✗ {source} → {fmt}: {result.error}")
+                        click.echo(f"\n✗ {source.name} → {fmt}: {result.error}")
 
     click.echo(f"\nCompleted: {success_count} successful, {fail_count} failed")
 

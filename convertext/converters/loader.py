@@ -20,3 +20,24 @@ def load_converters():
     register_converter(RtfConverter())
     register_converter(EpubConverter())
     register_converter(ToEpubConverter())
+
+    # Optional converters (gracefully skip if dependencies missing)
+    try:
+        from convertext.converters.ebooks.mobi import MobiConverter, ToMobiConverter
+        register_converter(MobiConverter())
+        register_converter(ToMobiConverter())
+    except ImportError:
+        pass  # MOBI support not installed
+
+    try:
+        from convertext.converters.ebooks.fb2 import FB2Converter, ToFB2Converter
+        register_converter(FB2Converter())
+        register_converter(ToFB2Converter())
+    except ImportError:
+        pass  # FB2 support requires lxml
+
+    try:
+        from convertext.converters.documents.odt import OdtConverter
+        register_converter(OdtConverter())
+    except ImportError:
+        pass  # ODT support requires odfpy
