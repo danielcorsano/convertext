@@ -1,9 +1,9 @@
-"""ODT (OpenDocument Text) format converter."""
+"""ODT (OpenDocument Text) format converter - native Python implementation."""
 
 from pathlib import Path
 from typing import Any, Dict, List
-from odf import text as odf_text, teletype
-from odf.opendocument import load as load_odt
+import zipfile
+from lxml import etree
 
 from convertext.converters.base import BaseConverter, Document
 
@@ -37,58 +37,80 @@ class OdtConverter(BaseConverter):
         return False
 
     def _read_odt(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read ODT into intermediate Document."""
+        """Read ODT - native parser using zipfile + lxml."""
         doc = Document()
-        odt_doc = load_odt(str(path))
 
-        # Extract metadata
-        meta = odt_doc.meta
-        if meta:
-            title = meta.getElementsByType(odf_text.Title)
-            if title:
-                doc.metadata['title'] = teletype.extractText(title[0])
+        with zipfile.ZipFile(path, 'r') as zf:
+            # Parse metadata
+            try:
+                meta_xml = etree.fromstring(zf.read('meta.xml'))
+                ns = {
+                    'office': 'urn:oasis:names:tc:opendocument:xmlns:office:1.0',
+                    'meta': 'urn:oasis:names:tc:opendocument:xmlns:meta:1.0',
+                    'dc': 'http://purl.org/dc/elements/1.1/'
+                }
 
-            creator = meta.getElementsByType(odf_text.Creator)
-            if creator:
-                doc.metadata['author'] = teletype.extractText(creator[0])
+                title = meta_xml.find('.//dc:title', ns)
+                if title is not None and title.text:
+                    doc.metadata['title'] = title.text
 
-        # Extract content
-        paragraphs = odt_doc.getElementsByType(odf_text.P)
-        for para in paragraphs:
-            text = teletype.extractText(para).strip()
-            if text:
-                # Check if it's a heading
-                style = para.getAttribute('stylename')
-                if style and 'heading' in style.lower():
-                    # Determine heading level from style
-                    level = 1
-                    if 'heading_20_2' in style.lower() or 'heading2' in style.lower():
-                        level = 2
-                    elif 'heading_20_3' in style.lower() or 'heading3' in style.lower():
-                        level = 3
-                    elif 'heading_20_4' in style.lower() or 'heading4' in style.lower():
-                        level = 4
-                    doc.add_heading(text, level)
-                else:
-                    doc.add_paragraph(text)
+                creator = meta_xml.find('.//dc:creator', ns)
+                if creator is not None and creator.text:
+                    doc.metadata['author'] = creator.text
+            except:
+                pass
 
-        # Also check for explicit headings
-        headings = odt_doc.getElementsByType(odf_text.H)
-        for heading in headings:
-            text = teletype.extractText(heading).strip()
-            if text:
-                # Get outline level
-                level = heading.getAttribute('outlinelevel')
-                if level:
-                    try:
-                        level = int(level)
-                    except (ValueError, TypeError):
-                        level = 1
-                else:
-                    level = 1
-                doc.add_heading(text, level)
+            # Parse content
+            content_xml = etree.fromstring(zf.read('content.xml'))
+            ns = {
+                'text': 'urn:oasis:names:tc:opendocument:xmlns:text:1.0',
+                'office': 'urn:oasis:names:tc:opendocument:xmlns:office:1.0'
+            }
+
+            body = content_xml.find('.//office:body/office:text', ns)
+            if body is not None:
+                # Process headings and paragraphs in order
+                for elem in body:
+                    tag = elem.tag.replace('{urn:oasis:names:tc:opendocument:xmlns:text:1.0}', '')
+
+                    if tag == 'h':
+                        # Heading
+                        text = self._extract_text(elem).strip()
+                        if text:
+                            level_attr = elem.get('{urn:oasis:names:tc:opendocument:xmlns:text:1.0}outline-level')
+                            level = int(level_attr) if level_attr else 1
+                            doc.add_heading(text, level)
+
+                    elif tag == 'p':
+                        # Paragraph
+                        text = self._extract_text(elem).strip()
+                        if text:
+                            # Check if styled as heading
+                            style = elem.get('{urn:oasis:names:tc:opendocument:xmlns:text:1.0}style-name', '')
+                            if 'heading' in style.lower():
+                                level = 1
+                                if '2' in style:
+                                    level = 2
+                                elif '3' in style:
+                                    level = 3
+                                elif '4' in style:
+                                    level = 4
+                                doc.add_heading(text, level)
+                            else:
+                                doc.add_paragraph(text)
 
         return doc
+
+    def _extract_text(self, element) -> str:
+        """Extract all text from an XML element."""
+        text_parts = []
+        if element.text:
+            text_parts.append(element.text)
+        for child in element:
+            text_parts.append(self._extract_text(child))
+            if child.tail:
+                text_parts.append(child.tail)
+        return ''.join(text_parts)
 
     def _write_txt(self, doc: Document, path: Path) -> bool:
         """Write Document to plain text."""

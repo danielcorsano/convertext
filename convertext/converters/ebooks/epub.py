@@ -1,16 +1,16 @@
-"""EPUB format converter."""
+"""EPUB format converter - native Python implementation."""
 
 from pathlib import Path
 from typing import Any, Dict, List
-
-from ebooklib import epub
+import zipfile
+from lxml import etree
 from bs4 import BeautifulSoup
 
 from convertext.converters.base import BaseConverter, Document
 
 
 class EpubConverter(BaseConverter):
-    """EPUB format converter."""
+    """Lightweight EPUB format converter (native Python)."""
 
     @property
     def input_formats(self) -> List[str]:
@@ -38,31 +38,63 @@ class EpubConverter(BaseConverter):
         return False
 
     def _read_epub(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read EPUB into intermediate Document."""
+        """Read EPUB - native parser using zipfile + lxml."""
         doc = Document()
-        book = epub.read_epub(str(path))
 
-        if book.get_metadata('DC', 'title'):
-            doc.metadata['title'] = book.get_metadata('DC', 'title')[0][0]
-        if book.get_metadata('DC', 'creator'):
-            doc.metadata['author'] = book.get_metadata('DC', 'creator')[0][0]
-        if book.get_metadata('DC', 'language'):
-            doc.metadata['language'] = book.get_metadata('DC', 'language')[0][0]
+        with zipfile.ZipFile(path, 'r') as zf:
+            # Find OPF file location from container.xml
+            container = etree.fromstring(zf.read('META-INF/container.xml'))
+            opf_path = container.find('.//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile').get('full-path')
 
-        for item in book.get_items():
-            if item.get_type() == 9:  # ITEM_DOCUMENT
-                soup = BeautifulSoup(item.get_content(), 'html.parser')
+            # Parse OPF for metadata and spine
+            opf = etree.fromstring(zf.read(opf_path))
+            opf_dir = str(Path(opf_path).parent)
 
-                for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-                    if element.name.startswith('h'):
-                        level = int(element.name[1])
-                        text = element.get_text().strip()
-                        if text:
-                            doc.add_heading(text, level)
-                    elif element.name == 'p':
-                        text = element.get_text().strip()
-                        if text:
-                            doc.add_paragraph(text)
+            # Extract metadata
+            ns = {'opf': 'http://www.idpf.org/2007/opf', 'dc': 'http://purl.org/dc/elements/1.1/'}
+
+            title = opf.find('.//dc:title', ns)
+            if title is not None and title.text:
+                doc.metadata['title'] = title.text
+
+            creator = opf.find('.//dc:creator', ns)
+            if creator is not None and creator.text:
+                doc.metadata['author'] = creator.text
+
+            lang = opf.find('.//dc:language', ns)
+            if lang is not None and lang.text:
+                doc.metadata['language'] = lang.text
+
+            # Get spine order (reading order)
+            manifest = {item.get('id'): item.get('href')
+                       for item in opf.findall('.//opf:manifest/opf:item', ns)}
+
+            spine_items = opf.findall('.//opf:spine/opf:itemref', ns)
+
+            # Read content in spine order
+            for itemref in spine_items:
+                idref = itemref.get('idref')
+                if idref in manifest:
+                    content_path = manifest[idref]
+                    if opf_dir and opf_dir != '.':
+                        content_path = f"{opf_dir}/{content_path}"
+
+                    try:
+                        content = zf.read(content_path).decode('utf-8', errors='ignore')
+                        soup = BeautifulSoup(content, 'html.parser')
+
+                        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+                            if element.name.startswith('h'):
+                                level = int(element.name[1])
+                                text = element.get_text().strip()
+                                if text:
+                                    doc.add_heading(text, level)
+                            elif element.name == 'p':
+                                text = element.get_text().strip()
+                                if text:
+                                    doc.add_paragraph(text)
+                    except:
+                        continue
 
         return doc
 
@@ -235,6 +267,7 @@ class ToEpubConverter(BaseConverter):
 
     def _create_epub(self, doc: Document, path: Path, config: Dict[str, Any], default_title: str) -> bool:
         """Create EPUB from Document."""
+        from ebooklib import epub
         book = epub.EpubBook()
 
         title = doc.metadata.get('title', default_title)

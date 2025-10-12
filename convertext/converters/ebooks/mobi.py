@@ -1,14 +1,15 @@
-"""MOBI format converter."""
+"""MOBI format converter - lightweight native Python implementation."""
 
 from pathlib import Path
 from typing import Any, Dict, List
 import struct
+import zlib
 
 from convertext.converters.base import BaseConverter, Document
 
 
 class MobiConverter(BaseConverter):
-    """MOBI format converter (read-only, converts via EPUB)."""
+    """Lightweight MOBI format converter (native Python)."""
 
     @property
     def input_formats(self) -> List[str]:
@@ -22,47 +23,7 @@ class MobiConverter(BaseConverter):
         return source in self.input_formats and target in self.output_formats
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
-        """Convert MOBI/AZW to target format using Calibre."""
-        import shutil
-        import subprocess
-        import tempfile
-
-        # Use Calibre's ebook-convert for MOBI reading
-        ebook_convert = shutil.which('ebook-convert')
-        if not ebook_convert:
-            raise RuntimeError(
-                "MOBI/AZW reading requires Calibre's 'ebook-convert'. "
-                "Install Calibre: https://calibre-ebook.com/download"
-            )
-
-        # Convert MOBI → EPUB first, then read EPUB
-        with tempfile.NamedTemporaryFile(suffix='.epub', delete=False) as tmp:
-            tmp_epub = Path(tmp.name)
-
-        try:
-            # Convert to EPUB using Calibre
-            result = subprocess.run(
-                [ebook_convert, str(source_path), str(tmp_epub)],
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-
-            if result.returncode != 0 or not tmp_epub.exists():
-                raise RuntimeError(f"MOBI conversion failed: {result.stderr}")
-
-            # Now read the EPUB and convert to target
-            from convertext.converters.ebooks.epub import EpubConverter
-            epub_converter = EpubConverter()
-            success = epub_converter.convert(tmp_epub, target_path, config)
-
-            return success
-
-        finally:
-            # Cleanup temp file
-            if tmp_epub.exists():
-                tmp_epub.unlink()
-
+        """Convert MOBI/AZW to target format."""
         doc = self._read_mobi(source_path, config)
 
         target_fmt = target_path.suffix.lstrip('.').lower()
@@ -75,7 +36,130 @@ class MobiConverter(BaseConverter):
 
         return False
 
+    def _read_mobi(self, path: Path, config: Dict[str, Any]) -> Document:
+        """Read MOBI file - lightweight native parser."""
+        doc = Document()
 
+        with open(path, 'rb') as f:
+            # Read PalmDB header
+            f.seek(60)  # Skip to record count
+            num_records = struct.unpack('>H', f.read(2))[0]
+
+            # Read record info list
+            f.seek(78)  # Start of record list
+            records = []
+            for i in range(num_records):
+                offset = struct.unpack('>I', f.read(4))[0]
+                records.append(offset)
+                f.read(4)  # Skip attributes and ID
+
+            # Read MOBI header from record 0
+            f.seek(records[0])
+            mobi_header = f.read(records[1] - records[0] if len(records) > 1 else 1024)
+
+            # Check compression type
+            compression = struct.unpack('>H', mobi_header[0:2])[0]
+
+            # Extract text records (usually records 1+)
+            html_parts = []
+            text_records = min(num_records - 1, 1000)  # Limit for safety
+
+            for i in range(1, text_records):
+                if i >= len(records) - 1:
+                    break
+
+                f.seek(records[i])
+                record_size = records[i + 1] - records[i]
+                if record_size <= 0 or record_size > 100000:
+                    continue
+
+                record_data = f.read(record_size)
+
+                try:
+                    # Decompress if needed
+                    if compression == 2:  # PalmDOC compression
+                        text = self._palmdoc_decompress(record_data)
+                    elif compression == 1:  # No compression
+                        text = record_data
+                    else:
+                        text = record_data
+
+                    # Try to decode as text
+                    try:
+                        decoded = text.decode('utf-8', errors='ignore')
+                    except:
+                        decoded = text.decode('latin-1', errors='ignore')
+
+                    html_parts.append(decoded)
+
+                except Exception:
+                    continue
+
+            # Combine HTML
+            html_content = ''.join(html_parts)
+
+            # Parse HTML content
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # Extract metadata
+            title_tag = soup.find('title')
+            if title_tag:
+                doc.metadata['title'] = title_tag.get_text()
+
+            # Parse content
+            for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
+                if element.name.startswith('h'):
+                    level = int(element.name[1])
+                    text = element.get_text().strip()
+                    if text:
+                        doc.add_heading(text, level)
+                elif element.name == 'p':
+                    text = element.get_text().strip()
+                    if text:
+                        doc.add_paragraph(text)
+
+        return doc
+
+    def _palmdoc_decompress(self, data: bytes) -> bytes:
+        """Decompress PalmDOC compressed data."""
+        result = []
+        i = 0
+
+        while i < len(data):
+            c = data[i]
+            i += 1
+
+            if c == 0:
+                continue
+            elif c >= 1 and c <= 8:
+                # Copy next c bytes
+                result.extend(data[i:i + c])
+                i += c
+            elif c >= 0x80 and c <= 0xBF:
+                # Space + char
+                result.append(0x20)
+                result.append(c ^ 0x80)
+            elif c >= 0xC0:
+                # Copy from output
+                if i < len(data):
+                    c2 = data[i]
+                    i += 1
+                    dist = ((c << 8) | c2) & 0x3FFF
+                    length = (dist & 7) + 3
+                    dist = (dist >> 3) + 1
+
+                    # Copy from result
+                    start = len(result) - dist
+                    if start >= 0:
+                        for _ in range(length):
+                            if start < len(result):
+                                result.append(result[start])
+                                start += 1
+            else:
+                result.append(c)
+
+        return bytes(result)
     def _write_txt(self, doc: Document, path: Path) -> bool:
         """Write Document to plain text."""
         with open(path, 'w', encoding='utf-8') as f:

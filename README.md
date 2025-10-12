@@ -30,21 +30,12 @@ pip install convertext
 # RTF support
 pip install convertext[rtf]
 
-# MOBI/AZW support
-pip install convertext[mobi]
-
 # All optional formats
 pip install convertext[all]
 ```
 
-**Note**: MOBI/AZW3 writing requires Calibre or kindlegen installed separately.
+**Note**: MOBI/AZW3 writing requires Calibre or kindlegen installed separately. Reading MOBI is pure Python (no dependencies).
 
-### From Source
-```bash
-git clone https://github.com/danielcorsano/convertext.git
-cd convertext
-poetry install
-```
 
 ## Quick Start
 
@@ -155,8 +146,8 @@ convertext ebook.epub --format html
 | **Markdown** | HTML, TXT, EPUB, FB2 | Full markdown support |
 | **HTML** | TXT, MD, EPUB, FB2 | Extracts content from web pages |
 | **EPUB** | TXT, HTML, MD, MOBI, AZW3 | Extracts/converts ebook content |
-| **MOBI** | TXT, HTML, MD | Kindle format (requires `mobi` extra) |
-| **AZW/AZW3** | TXT, HTML, MD | Kindle formats (requires `mobi` extra) |
+| **MOBI** | TXT, HTML, MD | Kindle format (native Python parser) |
+| **AZW/AZW3** | TXT, HTML, MD | Kindle formats (native Python parser) |
 | **FB2** | TXT, HTML, MD | FictionBook 2.0 format |
 
 \* Via multi-hop conversion (automatic)
