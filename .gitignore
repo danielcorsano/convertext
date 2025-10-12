@@ -1,6 +1,7 @@
 # Project-specific
 CLAUDE.md
 plan/
+text/
 
 # Python
 __pycache__/
