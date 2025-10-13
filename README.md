@@ -49,7 +49,7 @@ convertext document.md --format html,epub
 # Batch convert all Word docs to Markdown
 convertext *.docx --format md
 
-# Convert PDF to Kindle format (multi-hop: PDF → TXT → EPUB → MOBI)
+# Convert PDF to Kindle format (multi-hop: PDF → TXT → MOBI)
 convertext book.pdf --format mobi
 
 # See all supported formats
@@ -341,9 +341,27 @@ This allows any-to-any conversions without N² converter implementations.
 
 - **BaseConverter**: Abstract base for all format converters
 - **Document**: Intermediate representation (metadata, content blocks, images)
-- **ConverterRegistry**: Routes source→target format conversions
-- **ConversionEngine**: Orchestrates the conversion process
+- **ConverterRegistry**: Routes source→target format conversions with BFS pathfinding
+- **ConversionEngine**: Orchestrates conversions and multi-hop chaining
 - **Config**: Manages configuration with priority merging
+
+### Native Implementations
+
+ConvertExt implements lightweight native parsers for ebook formats:
+
+- **EPUB**: Native reader/writer using zipfile + lxml (~180 lines)
+  - Reads: Parses OPF metadata and spine order
+  - Writes: Generates EPUB 3 structure (container.xml, OPF, NCX, XHTML)
+
+- **MOBI**: Native reader/writer using PalmDB format (~340 lines)
+  - Reads: PalmDB parser with PalmDOC decompression
+  - Writes: PalmDB structure with optimized PalmDOC compression
+
+- **ODT**: Native reader using zipfile + lxml (~40 lines)
+
+- **FB2**: Native reader/writer using lxml XML parser (~340 lines)
+
+Total: ~900 lines of native ebook code, zero external tool dependencies.
 
 ## Development
 
@@ -382,10 +400,10 @@ The requested conversion is not supported. Check supported formats with:
 convertext --list-formats
 ```
 
-### "RTF support requires striprtf package"
-Install the RTF extra:
+### RTF Files Not Converting
+RTF is now included in the core package. If you have issues, ensure striprtf is installed:
 ```bash
-pip install convertext[rtf]
+pip install --upgrade convertext
 ```
 
 ### "Target file already exists"
@@ -403,11 +421,16 @@ documents:
 
 ## Roadmap
 
-- [x] Multi-hop conversions (PDF → HTML → EPUB)
-- [x] MOBI/AZW3 ebook formats
+**Completed (v0.1.0):**
+- [x] Multi-hop conversions with BFS pathfinding
+- [x] Native EPUB reader/writer (zero dependencies)
+- [x] Native MOBI reader/writer (zero dependencies)
 - [x] ODT (OpenDocument) support
 - [x] FB2 (FictionBook) format
-- [ ] Comic book formats (CBZ, CBR)
+- [x] RTF format support
+
+**Future Features:**
+- [ ] Comic book formats (CBZ, CBR, CB7)
 - [ ] Apple Pages format
 - [ ] Custom CSS for HTML/EPUB output
 - [ ] Image optimization options
@@ -423,7 +446,7 @@ Contributions welcome! Please:
 3. Make your changes with tests
 4. Submit a pull request
 
-See [CLAUDE.md](CLAUDE.md) for development guidelines.
+For development setup, see the Development section above.
 
 ## License
 
