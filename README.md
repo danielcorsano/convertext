@@ -18,10 +18,10 @@ Convert between all major document and ebook formats with a single terminal comm
 **Ebooks**: EPUB, MOBI, FB2
 
 **Native Python Implementations**:
-- EPUB reader/writer (~180 lines)
-- MOBI reader/writer (~340 lines)
-- ODT reader (~40 lines)
-- FB2 reader/writer (~340 lines)
+- EPUB reader/writer
+- MOBI reader/writer
+- ODT reader
+- FB2 reader/writer
 
 ## Features
 
@@ -343,19 +343,17 @@ This allows any-to-any conversions without N² converter implementations.
 
 ConverText implements lightweight native Python parsers for ebook formats:
 
-- **EPUB**: Native Python reader/writer using zipfile + lxml (~180 lines)
+- **EPUB**: Native Python reader/writer using zipfile + lxml
   - Reads: Parses OPF metadata and spine order
   - Writes: Generates EPUB 3 structure (container.xml, OPF, NCX, XHTML)
 
-- **MOBI**: Native Python reader/writer using PalmDB format (~340 lines)
+- **MOBI**: Native Python reader/writer using PalmDB format
   - Reads: PalmDB parser with PalmDOC decompression
   - Writes: PalmDB structure with optimized PalmDOC compression
 
-- **ODT**: Native Python reader using zipfile + lxml (~40 lines)
+- **ODT**: Native Python reader using zipfile + lxml
 
-- **FB2**: Native Python reader/writer using lxml XML parser (~340 lines)
-
-Total: ~900 lines of native Python ebook code.
+- **FB2**: Native Python reader/writer using lxml XML parser
 
 ## Development
 
