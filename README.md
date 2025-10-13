@@ -2,6 +2,7 @@
 
 **Lightweight universal text converter** for documents and ebooks. Self-contained Python package with native format parsers.
 
+[![PyPI version](https://badge.fury.io/py/convertext.svg)](https://pypi.org/project/convertext/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -53,6 +54,7 @@ pip install convertext[all]
 
 ## Quick Start
 
+### Command Line
 ```bash
 # Convert a PDF to EPUB (multi-hop: PDF → TXT → EPUB)
 convertext book.pdf --format epub
@@ -68,6 +70,20 @@ convertext book.pdf --format mobi
 
 # See all supported formats
 convertext --list-formats
+```
+
+### Python / Jupyter
+```python
+import convertext
+
+# Simple conversion
+convertext.convert('book.pdf', 'epub')
+
+# With options
+convertext.convert('document.md', 'html', output='./out/', overwrite=True)
+
+# Keep intermediate files (for debugging multi-hop)
+convertext.convert('book.pdf', 'mobi', keep_intermediate=True)
 ```
 
 ## Usage Examples
