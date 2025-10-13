@@ -1,22 +1,36 @@
-# ConvertExt
+# ConverText
 
-**Lightweight universal text converter** for documents and ebooks with zero external dependencies for core formats.
+**Lightweight universal text converter** for documents and ebooks. Self-contained Python package with native format parsers.
 
-[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Convert between document and ebook formats with a single command. No Calibre, no heavy dependencies—just pure Python conversion.
+Convert between all major document and ebook formats with a single terminal command. Do multiple files at the same time and send them anywhere in the file system instantly.
+
+## Supported Formats
+
+### Read (Input)
+**Documents**: PDF, DOCX, DOC, ODT, RTF, TXT, Markdown, HTML
+**Ebooks**: EPUB, MOBI, AZW (non-DRM), FB2
+
+### Write (Output)
+**Documents**: TXT, Markdown, HTML
+**Ebooks**: EPUB, MOBI, FB2
+
+**Native Python Implementations**:
+- EPUB reader/writer (~180 lines)
+- MOBI reader/writer (~340 lines)
+- ODT reader (~40 lines)
+- FB2 reader/writer (~340 lines)
 
 ## Features
 
-- 🚀 **Fast & Lightweight** - Core package < 15MB, no system dependencies
-- 📚 **Multiple Formats** - Documents (PDF, DOCX, ODT, HTML, MD, TXT, RTF) and Ebooks (EPUB, MOBI, AZW3, FB2)
+- 🚀 **Fast & Lightweight** - Self-contained Python package < 15MB
 - 🔄 **Batch Processing** - Convert multiple files at once with glob patterns
 - 🔗 **Multi-Hop Conversion** - Automatically chains conversions (e.g., PDF → HTML → EPUB)
 - ⚙️ **Highly Configurable** - YAML config with priority merging
 - 🎯 **Simple CLI** - Intuitive command-line interface
 - 🔍 **Metadata Preservation** - Keeps author, title, and document properties
-- 📦 **Optional Extras** - Install only what you need
 
 ## Installation
 
@@ -34,7 +48,7 @@ pip install convertext[comics]
 pip install convertext[all]
 ```
 
-**Note**: Core package includes native EPUB and MOBI readers/writers with zero external dependencies.
+**Note**: Core package includes native Python EPUB and MOBI readers/writers.
 
 
 ## Quick Start
@@ -132,29 +146,9 @@ convertext ebook.epub --format txt
 convertext ebook.epub --format html
 ```
 
-## Supported Formats
+## Multi-Hop Conversion
 
-### Input → Output Conversions
-
-| Input Format | Output Formats | Notes |
-|-------------|----------------|-------|
-| **PDF** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Extracts text and metadata |
-| **DOCX/DOC** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Preserves headings and structure |
-| **ODT** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | OpenDocument Text (native parser) |
-| **RTF** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Rich Text Format |
-| **TXT** | HTML, MD, EPUB, MOBI, FB2 | Plain text with paragraph detection |
-| **Markdown** | HTML, TXT, EPUB, MOBI, FB2 | Full markdown support |
-| **HTML** | TXT, MD, EPUB, MOBI, FB2 | Extracts content from web pages |
-| **EPUB** | TXT, HTML, MD | EPUB 2/3 (native reader/writer) |
-| **MOBI** | TXT, HTML, MD | Kindle format (native reader/writer) |
-| **AZW/AZW3** | TXT, HTML, MD | Kindle formats (native parser) |
-| **FB2** | TXT, HTML, MD, EPUB*, MOBI* | FictionBook 2.0 (native reader/writer) |
-
-\* Via multi-hop conversion (automatic)
-
-### Multi-Hop Conversion
-
-ConvertExt automatically finds conversion paths for unsupported direct conversions:
+ConverText automatically finds conversion paths for unsupported direct conversions:
 
 ```bash
 # PDF → EPUB: Automatically converts via PDF → TXT → EPUB (2 hops)
@@ -263,7 +257,7 @@ logging:
 ```
 Usage: convertext [OPTIONS] [FILES]...
 
-  ConvertExt - Lightweight universal text converter.
+  ConverText - Lightweight universal text converter.
 
 Options:
   -f, --format TEXT            Output format(s), comma-separated
@@ -329,7 +323,7 @@ convertext notes/*.md --format epub
 
 ## Architecture
 
-ConvertExt uses an intermediate `Document` format for conversions:
+ConverText uses an intermediate `Document` format for conversions:
 
 ```
 Input Format → Document (internal) → Output Format
@@ -347,21 +341,21 @@ This allows any-to-any conversions without N² converter implementations.
 
 ### Native Implementations
 
-ConvertExt implements lightweight native parsers for ebook formats:
+ConverText implements lightweight native Python parsers for ebook formats:
 
-- **EPUB**: Native reader/writer using zipfile + lxml (~180 lines)
+- **EPUB**: Native Python reader/writer using zipfile + lxml (~180 lines)
   - Reads: Parses OPF metadata and spine order
   - Writes: Generates EPUB 3 structure (container.xml, OPF, NCX, XHTML)
 
-- **MOBI**: Native reader/writer using PalmDB format (~340 lines)
+- **MOBI**: Native Python reader/writer using PalmDB format (~340 lines)
   - Reads: PalmDB parser with PalmDOC decompression
   - Writes: PalmDB structure with optimized PalmDOC compression
 
-- **ODT**: Native reader using zipfile + lxml (~40 lines)
+- **ODT**: Native Python reader using zipfile + lxml (~40 lines)
 
-- **FB2**: Native reader/writer using lxml XML parser (~340 lines)
+- **FB2**: Native Python reader/writer using lxml XML parser (~340 lines)
 
-Total: ~900 lines of native ebook code, zero external tool dependencies.
+Total: ~900 lines of native Python ebook code.
 
 ## Development
 
@@ -423,8 +417,8 @@ documents:
 
 **Completed (v0.1.0):**
 - [x] Multi-hop conversions with BFS pathfinding
-- [x] Native EPUB reader/writer (zero dependencies)
-- [x] Native MOBI reader/writer (zero dependencies)
+- [x] Native Python EPUB reader/writer
+- [x] Native Python MOBI reader/writer
 - [x] ODT (OpenDocument) support
 - [x] FB2 (FictionBook) format
 - [x] RTF format support

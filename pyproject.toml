@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "convertext"
 version = "0.1.0"
-description = "Lightweight universal text converter"
+description = "Lightweight universal text/ebook/document format converter with CLI"
 authors = ["danielcorsano"]
 readme = "README.md"
 license = "MIT"
@@ -16,11 +16,15 @@ classifiers = [
     "Topic :: Utilities",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.9"
 click = "^8.3.0"
 pyyaml = "^6.0.3"
 pypdf = "^6.1.1"
