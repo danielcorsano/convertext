@@ -266,65 +266,117 @@ class ToEpubConverter(BaseConverter):
         return doc
 
     def _create_epub(self, doc: Document, path: Path, config: Dict[str, Any], default_title: str) -> bool:
-        """Create EPUB from Document."""
-        from ebooklib import epub
-        book = epub.EpubBook()
+        """Create EPUB from Document - native implementation."""
+        import uuid
+        from datetime import datetime
 
         title = doc.metadata.get('title', default_title)
-        book.set_title(title)
-        book.set_language(doc.metadata.get('language', 'en'))
+        author = doc.metadata.get('author', 'Unknown')
+        language = doc.metadata.get('language', 'en')
+        uid = str(uuid.uuid4())
 
-        if doc.metadata.get('author'):
-            book.add_author(doc.metadata['author'])
-
+        # Split content into chapters
         chapters = []
-        current_chapter_content = []
-        chapter_num = 1
+        current_chapter = []
+        chapter_titles = []
 
         for block in doc.content:
             if block['type'] == 'heading' and block['level'] == 1:
-                if current_chapter_content:
-                    chapter = epub.EpubHtml(
-                        title=f"Chapter {chapter_num}",
-                        file_name=f'chap_{chapter_num:02d}.xhtml',
-                        lang='en'
-                    )
-                    chapter.content = ''.join(current_chapter_content)
-                    chapters.append(chapter)
-                    chapter_num += 1
-                    current_chapter_content = []
-
-                current_chapter_content.append(f'<h1>{self._escape_html(block["data"])}</h1>')
-
+                if current_chapter:
+                    chapters.append(current_chapter)
+                    current_chapter = []
+                chapter_titles.append(block['data'])
+                current_chapter.append(f'<h1>{self._escape_html(block["data"])}</h1>')
             elif block['type'] == 'paragraph':
-                current_chapter_content.append(f'<p>{self._escape_html(block["data"])}</p>')
+                current_chapter.append(f'<p>{self._escape_html(block["data"])}</p>')
             elif block['type'] == 'heading':
                 level = block['level']
-                current_chapter_content.append(f'<h{level}>{self._escape_html(block["data"])}</h{level}>')
+                current_chapter.append(f'<h{level}>{self._escape_html(block["data"])}</h{level}>')
 
-        if current_chapter_content:
-            chapter = epub.EpubHtml(
-                title=f"Chapter {chapter_num}",
-                file_name=f'chap_{chapter_num:02d}.xhtml',
-                lang='en'
-            )
-            chapter.content = ''.join(current_chapter_content)
-            chapters.append(chapter)
+        if current_chapter:
+            chapters.append(current_chapter)
 
         if not chapters:
-            chapter = epub.EpubHtml(title='Content', file_name='content.xhtml', lang='en')
-            chapter.content = '<h1>Content</h1><p>No content</p>'
-            chapters.append(chapter)
+            chapters = [['<p>No content</p>']]
+            chapter_titles = ['Content']
 
-        for chapter in chapters:
-            book.add_item(chapter)
+        if not chapter_titles:
+            chapter_titles = [f'Chapter {i+1}' for i in range(len(chapters))]
 
-        book.toc = tuple(chapters)
-        book.spine = ['nav'] + chapters
-        book.add_item(epub.EpubNcx())
-        book.add_item(epub.EpubNav())
+        # Create EPUB ZIP structure
+        with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            # mimetype (must be uncompressed and first)
+            zf.writestr('mimetype', 'application/epub+zip', compress_type=zipfile.ZIP_STORED)
 
-        epub.write_epub(str(path), book)
+            # container.xml
+            container_xml = '''<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>'''
+            zf.writestr('META-INF/container.xml', container_xml)
+
+            # Generate manifest and spine items
+            manifest_items = []
+            spine_items = []
+            toc_items = []
+
+            for i, (chapter, chapter_title) in enumerate(zip(chapters, chapter_titles), 1):
+                filename = f'chap_{i:02d}.xhtml'
+                manifest_items.append(f'    <item id="chapter{i}" href="{filename}" media-type="application/xhtml+xml"/>')
+                spine_items.append(f'    <itemref idref="chapter{i}"/>')
+                toc_items.append(f'    <navPoint id="navPoint-{i}" playOrder="{i}">\n      <navLabel><text>{self._escape_html(chapter_title)}</text></navLabel>\n      <content src="{filename}"/>\n    </navPoint>')
+
+                # Write chapter XHTML
+                xhtml = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+  <title>{self._escape_html(chapter_title)}</title>
+</head>
+<body>
+{''.join(chapter)}
+</body>
+</html>'''
+                zf.writestr(f'OEBPS/{filename}', xhtml)
+
+            # content.opf
+            opf = f'''<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">{uid}</dc:identifier>
+    <dc:title>{self._escape_html(title)}</dc:title>
+    <dc:creator>{self._escape_html(author)}</dc:creator>
+    <dc:language>{language}</dc:language>
+    <meta property="dcterms:modified">{datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
+  </metadata>
+  <manifest>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+{''.join([item + '\n' for item in manifest_items])}
+  </manifest>
+  <spine toc="ncx">
+{''.join([item + '\n' for item in spine_items])}
+  </spine>
+</package>'''
+            zf.writestr('OEBPS/content.opf', opf)
+
+            # toc.ncx (for EPUB 2 compatibility)
+            ncx = f'''<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="{uid}"/>
+    <meta name="dtb:depth" content="1"/>
+  </head>
+  <docTitle>
+    <text>{self._escape_html(title)}</text>
+  </docTitle>
+  <navMap>
+{''.join([item + '\n' for item in toc_items])}
+  </navMap>
+</ncx>'''
+            zf.writestr('OEBPS/toc.ncx', ncx)
+
         return True
 
     def _escape_html(self, text: str) -> str:

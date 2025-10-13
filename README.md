@@ -27,14 +27,14 @@ pip install convertext
 
 ### With Optional Format Support
 ```bash
-# RTF support
-pip install convertext[rtf]
+# Comic book formats (CBZ, CBR, CB7)
+pip install convertext[comics]
 
 # All optional formats
 pip install convertext[all]
 ```
 
-**Note**: MOBI/AZW3 writing requires Calibre or kindlegen installed separately. Reading MOBI is pure Python (no dependencies).
+**Note**: Core package includes native EPUB and MOBI readers/writers with zero external dependencies.
 
 
 ## Quick Start
@@ -140,15 +140,15 @@ convertext ebook.epub --format html
 |-------------|----------------|-------|
 | **PDF** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Extracts text and metadata |
 | **DOCX/DOC** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Preserves headings and structure |
-| **ODT** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | OpenDocument Text format |
-| **RTF** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Requires `striprtf` extra |
-| **TXT** | HTML, MD, EPUB, FB2 | Plain text with paragraph detection |
-| **Markdown** | HTML, TXT, EPUB, FB2 | Full markdown support |
-| **HTML** | TXT, MD, EPUB, FB2 | Extracts content from web pages |
-| **EPUB** | TXT, HTML, MD, MOBI, AZW3 | Extracts/converts ebook content |
-| **MOBI** | TXT, HTML, MD | Kindle format (native Python parser) |
-| **AZW/AZW3** | TXT, HTML, MD | Kindle formats (native Python parser) |
-| **FB2** | TXT, HTML, MD | FictionBook 2.0 format |
+| **ODT** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | OpenDocument Text (native parser) |
+| **RTF** | TXT, HTML, MD, EPUB*, MOBI*, FB2* | Rich Text Format |
+| **TXT** | HTML, MD, EPUB, MOBI, FB2 | Plain text with paragraph detection |
+| **Markdown** | HTML, TXT, EPUB, MOBI, FB2 | Full markdown support |
+| **HTML** | TXT, MD, EPUB, MOBI, FB2 | Extracts content from web pages |
+| **EPUB** | TXT, HTML, MD | EPUB 2/3 (native reader/writer) |
+| **MOBI** | TXT, HTML, MD | Kindle format (native reader/writer) |
+| **AZW/AZW3** | TXT, HTML, MD | Kindle formats (native parser) |
+| **FB2** | TXT, HTML, MD, EPUB*, MOBI* | FictionBook 2.0 (native reader/writer) |
 
 \* Via multi-hop conversion (automatic)
 
@@ -161,9 +161,9 @@ ConvertExt automatically finds conversion paths for unsupported direct conversio
 convertext book.pdf --format epub --verbose
 # Output: ✓ book.pdf → book.epub (PDF → TXT → EPUB, 2 hops)
 
-# PDF → MOBI: Automatically converts via PDF → TXT → EPUB → MOBI (3 hops)
+# PDF → MOBI: Automatically converts via PDF → TXT → MOBI (2 hops)
 convertext book.pdf --format mobi --verbose
-# Output: ✓ book.pdf → book.mobi (PDF → TXT → EPUB → MOBI, 3 hops)
+# Output: ✓ book.pdf → book.mobi (PDF → TXT → MOBI, 2 hops)
 
 # Keep intermediate files for debugging
 convertext book.pdf --format epub --keep-intermediate
@@ -437,7 +437,6 @@ Built with:
 - [Click](https://click.palletsprojects.com/) - CLI framework
 - [pypdf](https://pypdf.readthedocs.io/) - PDF handling
 - [python-docx](https://python-docx.readthedocs.io/) - DOCX support
-- [ebooklib](https://github.com/aerkalov/ebooklib) - EPUB handling
 - [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) - HTML parsing
 - [markdown](https://python-markdown.github.io/) - Markdown processing
 
