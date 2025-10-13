@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Any, Dict, List
 import struct
-import zlib
 
 from convertext.converters.base import BaseConverter, Document
 

@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from typing import Any, Dict, List
-import re
 
 import markdown
 from bs4 import BeautifulSoup
