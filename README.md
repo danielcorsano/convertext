@@ -366,22 +366,22 @@ poetry install
 
 ### Run Tests
 ```bash
-poetry run pytest
-poetry run pytest -v                    # Verbose
-poetry run pytest --cov                 # With coverage
+pytest
+pytest -v                    # Verbose
+pytest --cov                 # With coverage
 ```
 
 ### Code Quality
 ```bash
-poetry run black .                      # Format code
-poetry run ruff check convertext/       # Lint
-poetry run mypy convertext/             # Type check
+black .                      # Format code
+ruff check convertext/       # Lint
+mypy convertext/             # Type check
 ```
 
 ### Manual Testing
 ```bash
-poetry run convertext --help
-poetry run convertext test.md --format html --verbose
+convertext --help
+convertext test.md --format html --verbose
 ```
 
 ## Troubleshooting
