@@ -471,6 +471,10 @@ Built with:
 - [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) - HTML parsing
 - [markdown](https://python-markdown.github.io/) - Markdown processing
 
+## Related Projects
+
+Want to listen to your text files instead of reading them? Try [**audiobook-reader**](https://pypi.org/project/audiobook-reader/) - converts text, ebooks, and documents into natural-sounding audiobooks.
+
 ## Support
 
 - 📖 [Documentation](https://github.com/danielcorsano/convertext)
