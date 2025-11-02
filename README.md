@@ -5,6 +5,7 @@
 [![PyPI version](https://badge.fury.io/py/convertext.svg)](https://pypi.org/project/convertext/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Sponsor](https://img.shields.io/github/sponsors/danielcorsano?label=Sponsor&logo=github)](https://github.com/sponsors/danielcorsano)
 
 Convert between all major document and ebook formats with a single terminal command. Get editable .txt or .md from PDF or ebook formats or make ebooks/PDFs from editable text formats. Work on multiple files at the same time and send them anywhere in the file system instantly.
 
@@ -474,6 +475,12 @@ Built with:
 ## Related Projects
 
 Want to listen to your text files instead of reading them? Try [**audiobook-reader**](https://pypi.org/project/audiobook-reader/) - converts text, ebooks, and documents into natural-sounding audiobooks.
+
+## 💝 Support This Project
+
+If you find this tool helpful, please consider [sponsoring the project](https://github.com/sponsors/danielcorsano). I created and maintain this software alone as a public service, and donations help me improve it and develop requested features.
+
+Your support makes a real difference in keeping this project active and growing. Thank you!
 
 ## Support
 
