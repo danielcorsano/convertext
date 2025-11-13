@@ -401,84 +401,13 @@ convertext --help
 convertext test.md --format html --verbose
 ```
 
-## Troubleshooting
-
-### "No converter found for X → Y"
-The requested conversion is not supported. Check supported formats with:
-```bash
-convertext --list-formats
-```
-
-### RTF Files Not Converting
-RTF is now included in the core package. If you have issues, ensure striprtf is installed:
-```bash
-pip install --upgrade convertext
-```
-
-### "Target file already exists"
-Use the `--overwrite` flag:
-```bash
-convertext file.pdf --format txt --overwrite
-```
-
-### Encoding Issues
-Specify encoding in config:
-```yaml
-documents:
-  encoding: utf-8  # or latin-1, cp1252, etc.
-```
-
-## Roadmap
-
-**Completed (v0.1.0):**
-- [x] Multi-hop conversions with BFS pathfinding
-- [x] Native Python EPUB reader/writer
-- [x] Native Python MOBI reader/writer
-- [x] ODT (OpenDocument) support
-- [x] FB2 (FictionBook) format
-- [x] RTF format support
-
-**Future Features:**
-- [ ] Comic book formats (CBZ, CBR, CB7)
-- [ ] Apple Pages format
-- [ ] Custom CSS for HTML/EPUB output
-- [ ] Image optimization options
-- [ ] OCR support for scanned PDFs
-- [ ] Parallel processing for batch conversions
-
-## Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Submit a pull request
-
-For development setup, see the Development section above.
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Credits
-
-Created by [danielcorsano](https://github.com/danielcorsano)
-
-Built with:
-- [Click](https://click.palletsprojects.com/) - CLI framework
-- [pypdf](https://pypdf.readthedocs.io/) - PDF handling
-- [python-docx](https://python-docx.readthedocs.io/) - DOCX support
-- [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) - HTML parsing
-- [markdown](https://python-markdown.github.io/) - Markdown processing
-
 ## Related Projects
 
 Want to listen to your text files instead of reading them? Try [**audiobook-reader**](https://pypi.org/project/audiobook-reader/) - converts text, ebooks, and documents into natural-sounding audiobooks.
 
 ## 💝 Support This Project
 
-If you find this tool helpful, please consider [sponsoring the project](https://github.com/sponsors/danielcorsano). I created and maintain this software alone as a public service, and donations help me improve it and develop requested features.
+If you find this tool helpful, please consider [sponsoring the project](https://github.com/sponsors/danielcorsano). I created and maintain this software alone as a public service, and donations help me improve it and develop requested features. If I get $99 of donations, I will use it to pay for the Apple developer program so I can make iOS versions of all my open source apps.
 
 Your support makes a real difference in keeping this project active and growing. Thank you!
 
@@ -487,3 +416,7 @@ Your support makes a real difference in keeping this project active and growing.
 - 📖 [Documentation](https://github.com/danielcorsano/convertext)
 - 🐛 [Issue Tracker](https://github.com/danielcorsano/convertext/issues)
 - 💬 [Discussions](https://github.com/danielcorsano/convertext/discussions)
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
