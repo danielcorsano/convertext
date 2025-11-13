@@ -4,8 +4,6 @@
 
 [![PyPI version](https://badge.fury.io/py/convertext.svg)](https://pypi.org/project/convertext/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Sponsor](https://img.shields.io/github/sponsors/danielcorsano?label=Sponsor&logo=github)](https://github.com/sponsors/danielcorsano)
 
 Convert between all major document and ebook formats with a single terminal command. Get editable .txt or .md from PDF or ebook formats or make ebooks/PDFs from editable text formats. Work on multiple files at the same time and send them anywhere in the file system instantly.
 
