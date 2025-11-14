@@ -1,9 +1,10 @@
 # ConverText
 
-**Lightweight universal text converter** for documents and ebooks. Self-contained Python package with native format parsers.
-
 [![PyPI version](https://badge.fury.io/py/convertext.svg)](https://pypi.org/project/convertext/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Downloads](https://img.shields.io/pypi/dm/audiobook-reader)](https://pypi.org/project/convertext/)
+
+**Lightweight universal text converter** for documents and ebooks. Self-contained Python package with native format parsers.
 
 Convert between all major document and ebook formats with a single terminal command. Get editable .txt or .md from PDF or ebook formats or make ebooks/PDFs from editable text formats. Work on multiple files at the same time and send them anywhere in the file system instantly.
 
