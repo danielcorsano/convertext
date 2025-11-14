@@ -2,7 +2,7 @@
 
 [![PyPI version](https://badge.fury.io/py/convertext.svg)](https://pypi.org/project/convertext/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![Downloads](https://img.shields.io/pypi/dm/audiobook-reader)](https://pypi.org/project/convertext/)
+[![Downloads](https://img.shields.io/pypi/dm/convertext)](https://pypi.org/project/convertext/)
 
 **Lightweight universal text converter** for documents and ebooks. Self-contained Python package with native format parsers.
 
