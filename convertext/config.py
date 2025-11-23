@@ -103,10 +103,6 @@ class Config:
         if user_config.exists():
             self._merge_config(self._load_yaml(user_config))
 
-        project_config = Path.cwd() / "convertext.yaml"
-        if project_config.exists():
-            self._merge_config(self._load_yaml(project_config))
-
     def _load_yaml(self, path: Path) -> Dict[str, Any]:
         """Load YAML config file."""
         with open(path, 'r') as f:
@@ -121,6 +117,46 @@ class Config:
                 else:
                     base[key] = value
         deep_merge(self.config, new_config)
+
+    def find_local_config(self, file_path: Path) -> Optional[Path]:
+        """Find convertext.yaml starting from file's directory, searching up to home.
+
+        Args:
+            file_path: Path to the file being converted
+
+        Returns:
+            Path to convertext.yaml if found, None otherwise
+        """
+        # Start from file's parent directory
+        search_dir = file_path.parent.resolve()
+        home_dir = Path.home()
+
+        # Search up through parent directories
+        while True:
+            config_path = search_dir / "convertext.yaml"
+            if config_path.exists():
+                return config_path
+
+            # Stop at home directory (don't go to root)
+            if search_dir == home_dir or search_dir.parent == search_dir:
+                break
+
+            search_dir = search_dir.parent
+
+        return None
+
+    def load_file_config(self, file_path: Path):
+        """Load and merge config file specific to the file being converted.
+
+        Searches for convertext.yaml from file's directory up to home directory.
+        This allows directory-specific configurations that are inherited by subdirectories.
+
+        Args:
+            file_path: Path to the file being converted
+        """
+        local_config = self.find_local_config(file_path)
+        if local_config:
+            self._merge_config(self._load_yaml(local_config))
 
     def override(self, overrides: Dict[str, Any]):
         """Override config with CLI arguments."""

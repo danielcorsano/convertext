@@ -178,79 +178,134 @@ Run `convertext --list-formats` to see all direct conversions. Multi-hop enables
 
 ## Configuration
 
-### Create Config File
+ConverText supports flexible configuration through YAML files. You can set global defaults or create directory-specific configurations that automatically apply when converting files from those locations.
 
+### How Configuration Works
+
+When you convert a file, ConverText searches for configuration in this order (highest priority first):
+
+1. **CLI arguments** - Flags you pass directly (e.g., `--output ~/Books/`)
+2. **Directory config** - `convertext.yaml` in the file's directory or any parent directory
+3. **User config** - `~/.convertext/config.yaml` (your global defaults)
+4. **Built-in defaults** - Sensible defaults built into ConverText
+
+### Directory-Based Configuration
+
+Place a `convertext.yaml` file in any directory to configure conversions for files in that directory and its subdirectories. The configuration is automatically discovered - ConverText searches from the file's location up through parent directories.
+
+**Example directory structure:**
+```
+~/Documents/books/
+├── convertext.yaml          # Config for all books
+├── fiction/
+│   ├── convertext.yaml      # Override for fiction (higher quality)
+│   └── novel.pdf
+└── technical/
+    └── manual.pdf           # Uses ~/Documents/books/convertext.yaml
+```
+
+When converting `fiction/novel.pdf`, ConverText uses `fiction/convertext.yaml`.
+When converting `technical/manual.pdf`, ConverText uses `books/convertext.yaml` (inherited).
+
+### Creating Configuration Files
+
+**Initialize global config:**
 ```bash
-# Initialize user config (creates ~/.convertext/config.yaml)
 convertext --init-config
 ```
 
-### Configuration Locations (Priority Order)
+**Create directory config:**
+```bash
+# Copy example file
+cp convertext.yaml.example convertext.yaml
 
-1. **CLI arguments** (highest priority)
-2. `./convertext.yaml` (project-level)
-3. `~/.convertext/config.yaml` (user-level)
-4. Built-in defaults (lowest priority)
+# Or create from scratch
+cat > convertext.yaml << EOF
+output:
+  directory: ~/Documents/converted
+  quality: high
+EOF
+```
 
-### Example Configuration
+### Configuration Example
 
-**~/.convertext/config.yaml**:
+See `convertext.yaml.example` for all available options. Here's a common configuration:
+
 ```yaml
 # Output settings
 output:
-  directory: ~/Documents/converted  # Where to save files
-  filename_pattern: "{name}.{ext}"  # Output naming pattern
-  overwrite: false                  # Protect existing files
-  preserve_structure: true          # Keep folder hierarchy in batch mode
+  directory: ~/Documents/converted
+  overwrite: false
 
 # Conversion quality
 conversion:
-  quality: high                     # low/medium/high
-  preserve_metadata: true           # Keep author, title, etc.
-  preserve_formatting: true         # Keep bold, italic, etc.
-  preserve_images: true             # Include images in output
+  quality: high
+  preserve_metadata: true
+  preserve_images: true
 
-# Document-specific settings
+# Document settings
 documents:
-  encoding: utf-8
-  embed_fonts: true
-  image_quality: 85                 # JPEG quality 1-100
-  dpi: 300                          # For image extraction
-
-  pdf:
-    compression: true
-    optimize: true
-
-  docx:
-    style_preservation: true
-    embed_images: true
+  dpi: 300
+  image_quality: 85
 
 # Ebook settings
 ebooks:
   epub:
-    version: 3                      # EPUB 2 or 3
-    split_chapters: true            # Auto-detect chapters
-    toc_depth: 3                    # Table of contents depth
-    cover_auto_detect: true         # Find cover image
-
-# Logging
-logging:
-  level: INFO                       # DEBUG/INFO/WARNING/ERROR
-  verbose: false
-  show_progress: true               # Progress bars
+    version: 3
+    split_chapters: true
+    toc_depth: 3
 ```
 
-### Config Key Reference
+### Common Configuration Examples
+
+**High-quality ebook conversion:**
+```yaml
+conversion:
+  quality: high
+
+documents:
+  dpi: 300
+  image_quality: 95
+
+ebooks:
+  epub:
+    version: 3
+    split_chapters: true
+```
+
+**Fast batch conversion (lower quality):**
+```yaml
+conversion:
+  quality: low
+
+documents:
+  dpi: 150
+  image_quality: 70
+```
+
+**Always overwrite, specific output directory:**
+```yaml
+output:
+  directory: ~/Converted
+  overwrite: true
+```
+
+### Key Configuration Options
 
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
-| `output` | `directory` | `null` | Output directory (null = source dir) |
-| `output` | `overwrite` | `false` | Overwrite existing files |
-| `conversion` | `quality` | `medium` | Conversion quality preset |
-| `conversion` | `preserve_metadata` | `true` | Keep document metadata |
-| `documents` | `encoding` | `utf-8` | Text file encoding |
-| `documents` | `dpi` | `300` | Image extraction DPI |
-| `ebooks.epub` | `version` | `3` | EPUB version (2 or 3) |
+| `output.directory` | | `null` | Output directory (null = source dir) |
+| `output.overwrite` | | `false` | Overwrite existing files |
+| `conversion.quality` | | `medium` | Preset: low/medium/high |
+| `conversion.preserve_metadata` | | `true` | Keep author, title, etc. |
+| `documents.encoding` | | `utf-8` | Text file encoding |
+| `documents.dpi` | | `300` | Image extraction DPI |
+| `documents.image_quality` | | `85` | JPEG quality (1-100) |
+| `ebooks.epub.version` | | `3` | EPUB version (2 or 3) |
+| `ebooks.epub.split_chapters` | | `true` | Auto-detect chapters |
+| `logging.level` | | `INFO` | Log level (DEBUG/INFO/WARNING/ERROR) |
+
+**See `convertext.yaml.example` for the complete list of options.**
 
 ## CLI Reference
 

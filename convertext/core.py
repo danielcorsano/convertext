@@ -35,6 +35,9 @@ class ConversionEngine:
         target_format: str
     ) -> ConversionResult:
         """Convert a file to target format (supports multi-hop)."""
+        # Load file-specific config (searches from file's dir up to home)
+        self.config.load_file_config(source_path)
+
         source_format = source_path.suffix.lstrip('.').lower()
         target_format = target_format.lstrip('.').lower()
 

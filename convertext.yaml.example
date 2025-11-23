@@ -1,0 +1,94 @@
+# ConverText Configuration File Example
+#
+# Place this file in any directory to configure conversions for files in that
+# directory and its subdirectories. The config is automatically discovered when
+# converting files - it searches from the file's location up through parent
+# directories.
+#
+# Priority: CLI args > local convertext.yaml > ~/.convertext/config.yaml > defaults
+#
+# To use: Copy this file to your working directory and rename to convertext.yaml
+
+# Output settings
+output:
+  directory: null                   # Output directory (null = same as source)
+  filename_pattern: "{name}.{ext}"  # Output naming pattern
+  overwrite: false                  # Overwrite existing files
+  preserve_structure: true          # Keep folder hierarchy in batch mode
+  create_backup: false              # Create .bak before overwriting
+
+# Conversion quality and features
+conversion:
+  quality: medium                   # Preset: low/medium/high
+  preserve_metadata: true           # Keep author, title, subject, etc.
+  preserve_formatting: true         # Keep bold, italic, headings
+  preserve_images: true             # Include images in output
+  extract_toc: true                 # Extract table of contents
+
+# Document format settings
+documents:
+  encoding: utf-8                   # Text file encoding
+  embed_fonts: true                 # Embed fonts in output
+  font_fallback: Liberation Sans    # Fallback font for missing fonts
+  image_quality: 85                 # JPEG quality (1-100)
+  dpi: 300                          # Image extraction DPI
+
+  # PDF-specific settings
+  pdf:
+    compression: true               # Compress PDF output
+    optimize: true                  # Optimize for file size
+    linearize: false                # Optimize for web viewing
+    pdf_version: "1.7"              # PDF version
+
+  # DOCX/DOC settings
+  docx:
+    style_preservation: true        # Preserve Word styles
+    embed_images: true              # Embed images in DOCX
+
+  # ODT settings
+  odt:
+    style_preservation: true        # Preserve OpenDocument styles
+
+# Ebook format settings
+ebooks:
+  # EPUB settings
+  epub:
+    version: 3                      # EPUB version (2 or 3)
+    split_chapters: true            # Auto-detect and split chapters
+    toc_depth: 3                    # Table of contents depth
+    cover_auto_detect: true         # Auto-detect cover image
+    stylesheet: null                # Custom CSS file (null = default)
+
+  # MOBI/AZW settings
+  mobi:
+    compression_level: 1            # Compression (0-9)
+    prefer_azw3: true               # Use AZW3 format when possible
+
+  # FictionBook2 settings
+  fb2:
+    validation: true                # Validate FB2 XML
+    include_binary_images: true     # Embed images as base64
+
+# Logging and output
+logging:
+  level: INFO                       # Log level: DEBUG/INFO/WARNING/ERROR
+  file: null                        # Log file path (null = no file)
+  format: "%(levelname)s: %(message)s"  # Log format
+  verbose: false                    # Verbose output
+  show_progress: true               # Show progress bars
+
+# Advanced processing settings (not yet implemented)
+processing:
+  parallel: true                    # Process files in parallel
+  max_workers: 4                    # Max parallel workers
+  temp_dir: null                    # Temp directory (null = system default)
+  cleanup_temp: true                # Clean up temp files
+  chunk_size: 4096                  # Read/write chunk size in bytes
+
+# Comic book settings (future feature)
+comics:
+  image_format: jpeg                # Output image format
+  image_quality: 90                 # Image quality (1-100)
+  max_image_width: 2048             # Max image width
+  max_image_height: 2048            # Max image height
+  preserve_order: true              # Keep original page order
