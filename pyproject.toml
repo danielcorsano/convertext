@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "convertext"
-version = "0.1.2"
+version = "0.1.3"
 description = "Lightweight universal text/ebook/document format converter with CLI"
 authors = ["danielcorsano"]
 readme = "README.md"
