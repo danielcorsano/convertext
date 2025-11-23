@@ -35,18 +35,8 @@ Convert between all major document and ebook formats with a single terminal comm
 
 ## Installation
 
-### Basic Installation
 ```bash
 pip install convertext
-```
-
-### With Optional Format Support
-```bash
-# Comic book formats (CBZ, CBR, CB7)
-pip install convertext[comics]
-
-# All optional formats
-pip install convertext[all]
 ```
 
 **Note**: Core package includes native Python EPUB and MOBI readers/writers.
@@ -243,11 +233,6 @@ ebooks:
     toc_depth: 3                    # Table of contents depth
     cover_auto_detect: true         # Find cover image
 
-# Performance
-processing:
-  parallel: true                    # Process multiple files in parallel
-  max_workers: 4                    # CPU cores to use
-
 # Logging
 logging:
   level: INFO                       # DEBUG/INFO/WARNING/ERROR
@@ -266,7 +251,6 @@ logging:
 | `documents` | `encoding` | `utf-8` | Text file encoding |
 | `documents` | `dpi` | `300` | Image extraction DPI |
 | `ebooks.epub` | `version` | `3` | EPUB version (2 or 3) |
-| `processing` | `parallel` | `true` | Parallel processing |
 
 ## CLI Reference
 

@@ -7,7 +7,6 @@ readme = "README.md"
 license = "MIT"
 homepage = "https://github.com/danielcorsano/convertext"
 repository = "https://github.com/danielcorsano/convertext"
-funding = "https://github.com/sponsors/danielcorsano"
 keywords = ["conversion", "ebook", "pdf", "epub", "mobi", "docx", "document"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -35,13 +34,6 @@ pillow = "^11.3.0"
 lxml = "^6.0.2"
 beautifulsoup4 = "^4.14.2"
 striprtf = "^0.0.26"
-
-[tool.poetry.group.comics]
-optional = true
-
-[tool.poetry.group.comics.dependencies]
-rarfile = "^4.2"
-py7zr = "^0.22"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"
