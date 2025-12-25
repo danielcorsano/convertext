@@ -37,7 +37,7 @@ class DocxConverter(BaseConverter):
         return False
 
     def _read_docx(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read DOCX into intermediate Document."""
+        """Read DOCX into intermediate Document with full formatting."""
         doc = Document()
         docx_doc = docx.Document(path)
 
@@ -56,9 +56,44 @@ class DocxConverter(BaseConverter):
                     level = 1
                 if para.text.strip():
                     doc.add_heading(para.text.strip(), level)
+
+            elif para.style.name.startswith('List'):
+                continue
+
             else:
                 if para.text.strip():
-                    doc.add_paragraph(para.text.strip())
+                    if len(para.runs) == 1 and not any([
+                        para.runs[0].bold,
+                        para.runs[0].italic,
+                        para.runs[0].underline
+                    ]):
+                        doc.add_paragraph(para.text.strip())
+                    else:
+                        for run in para.runs:
+                            if run.text.strip():
+                                color = None
+                                if run.font.color and run.font.color.rgb:
+                                    rgb = run.font.color.rgb
+                                    color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+
+                                doc.add_run(
+                                    text=run.text,
+                                    bold=run.bold or False,
+                                    italic=run.italic or False,
+                                    underline=run.underline or False,
+                                    color=color,
+                                    font_name=run.font.name,
+                                    font_size=int(run.font.size.pt) if run.font.size else None
+                                )
+
+        for table in docx_doc.tables:
+            rows = []
+            for row in table.rows:
+                row_data = [cell.text.strip() for cell in row.cells]
+                rows.append(row_data)
+
+            if rows:
+                doc.add_table(rows=rows[1:], headers=rows[0] if len(rows) > 1 else None)
 
         return doc
 

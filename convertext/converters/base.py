@@ -32,6 +32,49 @@ class Document:
         """Add paragraph."""
         self.content.append({"type": "paragraph", "data": text})
 
+    def add_run(
+        self,
+        text: str,
+        bold: bool = False,
+        italic: bool = False,
+        underline: bool = False,
+        color: Optional[str] = None,
+        font_name: Optional[str] = None,
+        font_size: Optional[int] = None,
+    ):
+        """Add inline text run with formatting."""
+        run_block = {
+            "type": "run",
+            "text": text,
+            "bold": bold,
+            "italic": italic,
+            "underline": underline,
+        }
+        if color:
+            run_block["color"] = color
+        if font_name:
+            run_block["font"] = font_name
+        if font_size:
+            run_block["size"] = font_size
+        self.content.append(run_block)
+
+    def add_table(
+        self, rows: List[List[str]], headers: Optional[List[str]] = None
+    ):
+        """Add table block."""
+        table_block = {"type": "table", "rows": rows}
+        if headers:
+            table_block["headers"] = headers
+        self.content.append(table_block)
+
+    def add_list(self, items: List[str], ordered: bool = False):
+        """Add list block (ordered or unordered)."""
+        self.content.append({"type": "list", "items": items, "ordered": ordered})
+
+    def add_link(self, text: str, url: str):
+        """Add hyperlink."""
+        self.content.append({"type": "link", "text": text, "url": url})
+
 
 class BaseConverter(ABC):
     """Abstract base class for all format converters."""

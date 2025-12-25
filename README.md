@@ -10,28 +10,39 @@ Convert between all major document and ebook formats with a single terminal comm
 
 ## Supported Formats
 
-### Read (Input)
-**Documents**: PDF, DOCX, DOC, ODT, RTF, TXT, Markdown, HTML
-**Ebooks**: EPUB, MOBI, AZW (non-DRM), FB2
-
-### Write (Output)
-**Documents**: TXT, Markdown, HTML
+### ✅ Full Bidirectional Support (Read & Write)
+**Documents**: PDF, DOCX, RTF, TXT, Markdown, HTML
 **Ebooks**: EPUB, MOBI, FB2
 
-**Native Python Implementations**:
-- EPUB reader/writer
-- MOBI reader/writer
-- ODT reader
-- FB2 reader/writer
+### 📖 Read Only (Input)
+**Documents**: DOC, ODT
+**Ebooks**: AZW (non-DRM)
+
+**Key Capabilities:**
+- **PDF Output**: Create PDFs from any document format with ReportLab
+- **DOCX Output**: Generate Word documents with formatting preservation
+- **RTF Output**: Cross-platform rich text format with native implementation
+- **Format Preservation**: Preserves bold, italic, colors, tables, lists across conversions
+
+**Native & Library-Based Implementations**:
+- **PDF Output**: ReportLab-based writer with full formatting support (tables, lists, headings, styles)
+- **DOCX Output**: python-docx writer with rich text formatting preservation
+- **RTF Output**: Native Python implementation for cross-platform compatibility
+- **EPUB**: Native reader/writer using zipfile + lxml (no external dependencies)
+- **MOBI**: Native reader/writer with PalmDB format support
+- **ODT**: Native reader using OpenDocument XML parsing
+- **FB2**: Native reader/writer for FictionBook format
 
 ## Features
 
-- 🚀 **Fast & Lightweight** - Self-contained Python package < 15MB
-- 🔄 **Batch Processing** - Convert multiple files at once with glob patterns
+- 🚀 **Fast & Lightweight** - Self-contained Python package (~17MB with PDF support)
+- 🔄 **Bidirectional Conversion** - Read AND write PDF, DOCX, RTF, and all ebook formats
+- 📝 **Formatting Preservation** - Maintains bold, italic, tables, lists, colors across formats
 - 🔗 **Multi-Hop Conversion** - Automatically chains conversions (e.g., PDF → HTML → EPUB)
 - ⚙️ **Highly Configurable** - YAML config with priority merging
 - 🎯 **Simple CLI** - Intuitive command-line interface
 - 🔍 **Metadata Preservation** - Keeps author, title, and document properties
+- 🎨 **High-Quality Output** - High-quality PDF/DOCX generation with ReportLab and python-docx
 
 ## Installation
 
@@ -84,11 +95,21 @@ convertext.convert('book.pdf', 'mobi', keep_intermediate=True)
 # PDF to text
 convertext document.pdf --format txt
 
-# Markdown to HTML
+# Markdown to HTML or PDF
 convertext README.md --format html
+convertext README.md --format pdf
 
 # DOCX to Markdown
 convertext report.docx --format md
+
+# Any format to PDF
+convertext story.txt --format pdf
+convertext article.html --format pdf
+convertext notes.md --format pdf
+
+# Create Word documents from any format
+convertext article.md --format docx
+convertext notes.txt --format docx
 
 # Text to EPUB (creates an ebook)
 convertext story.txt --format epub

@@ -41,3 +41,12 @@ def load_converters():
         register_converter(OdtConverter())
     except ImportError:
         pass  # ODT support requires odfpy
+
+    # New output converters
+    from convertext.converters.documents.to_pdf import ToPdfConverter
+    from convertext.converters.documents.to_docx import ToDocxConverter
+    from convertext.converters.documents.to_rtf import ToRtfConverter
+
+    register_converter(ToPdfConverter())
+    register_converter(ToDocxConverter())
+    register_converter(ToRtfConverter())

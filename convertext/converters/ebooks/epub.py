@@ -1,5 +1,6 @@
 """EPUB format converter - native Python implementation."""
 
+import datetime as dt
 from pathlib import Path
 from typing import Any, Dict, List
 import zipfile
@@ -268,7 +269,6 @@ class ToEpubConverter(BaseConverter):
     def _create_epub(self, doc: Document, path: Path, config: Dict[str, Any], default_title: str) -> bool:
         """Create EPUB from Document - native implementation."""
         import uuid
-        from datetime import datetime
 
         title = doc.metadata.get('title', default_title)
         author = doc.metadata.get('author', 'Unknown')
@@ -349,7 +349,7 @@ class ToEpubConverter(BaseConverter):
     <dc:title>{self._escape_html(title)}</dc:title>
     <dc:creator>{self._escape_html(author)}</dc:creator>
     <dc:language>{language}</dc:language>
-    <meta property="dcterms:modified">{datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
+    <meta property="dcterms:modified">{dt.datetime.now(dt.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
   </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>

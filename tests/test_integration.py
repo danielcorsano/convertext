@@ -61,7 +61,7 @@ def test_html_to_txt_conversion():
         assert result is True
         assert txt_file.exists()
         content = txt_file.read_text()
-        assert "Title" in content.upper()
+        assert "TITLE" in content.upper()
 
 
 def test_md_to_epub_conversion():
