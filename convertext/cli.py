@@ -151,8 +151,7 @@ def main(
                         click.echo(f"\n✓ {source.name} → {result.target_path.name}{hop_info}")
                 else:
                     fail_count += 1
-                    if verbose:
-                        click.echo(f"\n✗ {source.name} → {fmt}: {result.error}")
+                    click.echo(f"\n✗ {source.name} → {fmt}: {result.error}")
 
     click.echo(f"\nCompleted: {success_count} successful, {fail_count} failed")
 
