@@ -79,14 +79,5 @@ dmypy.json
 .temp/
 temp/
 
-# Test output files (generated during testing)
-tests/output/
-tests/**/*.pdf
-tests/**/*.docx
-tests/**/*.rtf
-tests/**/*.epub
-tests/**/*.mobi
-tests/**/*.odt
-tests/**/*_output.*
-tests/**/*_temp.*
-test_output/
+# Test files
+test_files/

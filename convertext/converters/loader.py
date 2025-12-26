@@ -8,6 +8,7 @@ from convertext.converters.documents.html import HtmlConverter
 from convertext.converters.documents.docx import DocxConverter
 from convertext.converters.documents.rtf import RtfConverter
 from convertext.converters.ebooks.epub import EpubConverter, ToEpubConverter
+from convertext.converters.documents.pdf_to_epub import PdfToEpubConverter
 
 
 def load_converters():
@@ -20,6 +21,7 @@ def load_converters():
     register_converter(RtfConverter())
     register_converter(EpubConverter())
     register_converter(ToEpubConverter())
+    register_converter(PdfToEpubConverter())
 
     # Optional converters (gracefully skip if dependencies missing)
     try:
