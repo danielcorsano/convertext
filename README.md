@@ -6,43 +6,23 @@
 
 **Lightweight universal text converter** for documents and ebooks. Self-contained Python package with native format parsers.
 
-Convert between all major document and ebook formats with a single terminal command. Get editable .txt or .md from PDF or ebook formats or make ebooks/PDFs from editable text formats. Work on multiple files at the same time and send them anywhere in the file system instantly.
+Convert between all major document and ebook formats with a single terminal command or through a Python API. Get editable .txt, .md or HTML from PDF or ebook formats or make ebooks/PDFs/HTML/etc. from text formats. Batch convert multiple files and send them anywhere in the file system or to your ereader automatically.
 
 ## Supported Formats
 
-### ✅ Full Bidirectional Support (Read & Write)
-**Documents**: PDF, DOCX, RTF, TXT, Markdown, HTML
-**Ebooks**: EPUB, MOBI, FB2
+**Bidirectional (Read & Write):**
+PDF, DOCX, RTF, TXT, Markdown, HTML, EPUB, MOBI, FB2
 
-### 📖 Read Only (Input)
-**Documents**: DOC, ODT
-**Ebooks**: AZW (non-DRM)
-
-**Key Capabilities:**
-- **PDF Output**: Create PDFs from any document format with ReportLab
-- **DOCX Output**: Generate Word documents with formatting preservation
-- **RTF Output**: Cross-platform rich text format with native implementation
-- **Format Preservation**: Preserves bold, italic, colors, tables, lists across conversions
-
-**Native & Library-Based Implementations**:
-- **PDF Output**: ReportLab-based writer with full formatting support (tables, lists, headings, styles)
-- **DOCX Output**: python-docx writer with rich text formatting preservation
-- **RTF Output**: Native Python implementation for cross-platform compatibility
-- **EPUB**: Native reader/writer using zipfile + lxml (no external dependencies)
-- **MOBI**: Native reader/writer with PalmDB format support
-- **ODT**: Native reader using OpenDocument XML parsing
-- **FB2**: Native reader/writer for FictionBook format
+**Read Only:**
+DOC, ODT, AZW, AZW3
 
 ## Features
 
-- 🚀 **Fast & Lightweight** - Self-contained Python package (~17MB with PDF support)
-- 🔄 **Bidirectional Conversion** - Read AND write PDF, DOCX, RTF, and all ebook formats
+- 🚀 **Fast & Lightweight** - Self-contained Python package (~25MB)
 - 📝 **Formatting Preservation** - Maintains bold, italic, tables, lists, colors across formats
-- 🔗 **Multi-Hop Conversion** - Automatically chains conversions (e.g., PDF → HTML → EPUB)
 - ⚙️ **Highly Configurable** - YAML config with priority merging
-- 🎯 **Simple CLI** - Intuitive command-line interface
+- 🎯 **Simple and Scriptable CLI & API** - Intuitive command-line interface and built-in Python functions
 - 🔍 **Metadata Preservation** - Keeps author, title, and document properties
-- 🎨 **High-Quality Output** - High-quality PDF/DOCX generation with ReportLab and python-docx
 
 ## Installation
 
@@ -50,14 +30,11 @@ Convert between all major document and ebook formats with a single terminal comm
 pip install convertext
 ```
 
-**Note**: Core package includes native Python EPUB and MOBI readers/writers.
-
-
 ## Quick Start
 
 ### Command Line
 ```bash
-# Convert a PDF to EPUB (multi-hop: PDF → TXT → EPUB)
+# Convert PDF to EPUB
 convertext book.pdf --format epub
 
 # Convert Markdown to HTML and EPUB
@@ -66,7 +43,7 @@ convertext document.md --format html,epub
 # Batch convert all Word docs to Markdown
 convertext *.docx --format md
 
-# Convert PDF to Kindle format (multi-hop: PDF → TXT → MOBI)
+# Convert PDF to MOBI
 convertext book.pdf --format mobi
 
 # See all supported formats
