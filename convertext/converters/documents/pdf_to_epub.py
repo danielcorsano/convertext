@@ -61,11 +61,11 @@ class PdfToEpubConverter(BaseConverter):
             for page in reader.pages:
                 text = page.extract_text()
                 if text.strip():
-                    # Split into paragraphs
-                    for para in text.split('\n\n'):
-                        para = para.strip()
-                        if para:
-                            doc.add_paragraph(para)
+                    # Split into paragraphs (each line is typically a paragraph or heading)
+                    for line in text.split('\n'):
+                        line = line.strip()
+                        if line:
+                            doc.add_paragraph(line)
 
         return doc
 
