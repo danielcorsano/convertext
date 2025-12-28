@@ -126,9 +126,6 @@ convertext *.md --format html --verbose
 
 # Use custom config file
 convertext book.md --format epub --config my-config.yaml
-
-# Set quality preset
-convertext document.pdf --format epub --quality high
 ```
 
 ### Working with Ebooks
@@ -196,7 +193,7 @@ Place a `convertext.yaml` file in any directory to configure conversions for fil
 ~/Documents/books/
 ├── convertext.yaml          # Config for all books
 ├── fiction/
-│   ├── convertext.yaml      # Override for fiction (higher quality)
+│   ├── convertext.yaml      # Override for fiction
 │   └── novel.pdf
 └── technical/
     └── manual.pdf           # Uses ~/Documents/books/convertext.yaml
@@ -221,7 +218,9 @@ cp convertext.yaml.example convertext.yaml
 cat > convertext.yaml << EOF
 output:
   directory: ~/Documents/converted
-  quality: high
+  overwrite: false
+documents:
+  encoding: utf-8
 EOF
 ```
 
@@ -233,59 +232,12 @@ See `convertext.yaml.example` for all available options. Here's a common configu
 # Output settings
 output:
   directory: ~/Documents/converted
+  filename_pattern: "{name}.{ext}"
   overwrite: false
-
-# Conversion quality
-conversion:
-  quality: high
-  preserve_metadata: true
-  preserve_images: true
 
 # Document settings
 documents:
-  dpi: 300
-  image_quality: 85
-
-# Ebook settings
-ebooks:
-  epub:
-    version: 3
-    split_chapters: true
-    toc_depth: 3
-```
-
-### Common Configuration Examples
-
-**High-quality ebook conversion:**
-```yaml
-conversion:
-  quality: high
-
-documents:
-  dpi: 300
-  image_quality: 95
-
-ebooks:
-  epub:
-    version: 3
-    split_chapters: true
-```
-
-**Fast batch conversion (lower quality):**
-```yaml
-conversion:
-  quality: low
-
-documents:
-  dpi: 150
-  image_quality: 70
-```
-
-**Always overwrite, specific output directory:**
-```yaml
-output:
-  directory: ~/Converted
-  overwrite: true
+  encoding: utf-8
 ```
 
 ### Key Configuration Options
@@ -293,17 +245,9 @@ output:
 | Section | Key | Default | Description |
 |---------|-----|---------|-------------|
 | `output.directory` | | `null` | Output directory (null = source dir) |
+| `output.filename_pattern` | | `{name}.{ext}` | Output filename pattern |
 | `output.overwrite` | | `false` | Overwrite existing files |
-| `conversion.quality` | | `medium` | Preset: low/medium/high |
-| `conversion.preserve_metadata` | | `true` | Keep author, title, etc. |
 | `documents.encoding` | | `utf-8` | Text file encoding |
-| `documents.dpi` | | `300` | Image extraction DPI |
-| `documents.image_quality` | | `85` | JPEG quality (1-100) |
-| `ebooks.epub.version` | | `3` | EPUB version (2 or 3) |
-| `ebooks.epub.split_chapters` | | `true` | Auto-detect chapters |
-| `logging.level` | | `INFO` | Log level (DEBUG/INFO/WARNING/ERROR) |
-
-**See `convertext.yaml.example` for the complete list of options.**
 
 ## CLI Reference
 
@@ -316,7 +260,6 @@ Options:
   -f, --format TEXT            Output format(s), comma-separated
   -o, --output PATH            Output directory
   -c, --config PATH            Custom config file
-  --quality [low|medium|high]  Conversion quality preset
   --overwrite                  Overwrite existing files
   --list-formats               List all supported formats
   --init-config                Initialize user config file

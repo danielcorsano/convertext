@@ -8,15 +8,16 @@ def test_default_config():
     """Test default configuration."""
     config = Config()
     assert config.get('output.overwrite') is False
-    assert config.get('conversion.quality') == 'medium'
+    assert config.get('output.directory') is None
+    assert config.get('output.filename_pattern') == '{name}.{ext}'
     assert config.get('documents.encoding') == 'utf-8'
 
 
 def test_config_get_nested():
-    """Test nested config retrieval."""
+    """Test nested config retrieval with dot notation."""
     config = Config()
-    assert config.get('documents.pdf.compression') is True
-    assert config.get('ebooks.epub.version') == 3
+    assert config.get('output.overwrite') is False
+    assert config.get('documents.encoding') == 'utf-8'
 
 
 def test_config_get_default():
@@ -36,11 +37,9 @@ def test_deep_merge():
     """Test deep config merging."""
     config = Config()
     config.override({
-        'documents': {
-            'pdf': {
-                'compression': False
-            }
+        'output': {
+            'directory': '/tmp/test'
         }
     })
-    assert config.get('documents.pdf.compression') is False
-    assert config.get('documents.pdf.optimize') is True
+    assert config.get('output.directory') == '/tmp/test'
+    assert config.get('output.overwrite') is False
