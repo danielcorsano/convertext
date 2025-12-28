@@ -1,7 +1,7 @@
 [project]
 name = "convertext"
 version = "0.2.0"
-description = "Lightweight universal text/ebook/document format converter with CLI - now with bidirectional format support"
+description = "Lightweight universal text/ebook/document format converter with CLI and API"
 readme = "README.md"
 license = "MIT"
 authors = [{name = "danielcorsano"}]
