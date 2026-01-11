@@ -41,7 +41,7 @@ class MobiConverter(BaseConverter):
 
         with open(path, 'rb') as f:
             # Read PalmDB header
-            f.seek(60)  # Skip to record count
+            f.seek(76)  # Skip to record count (at byte 76-77)
             num_records = struct.unpack('>H', f.read(2))[0]
 
             # Read record info list
@@ -63,7 +63,7 @@ class MobiConverter(BaseConverter):
             html_parts = []
             text_records = min(num_records - 1, 1000)  # Limit for safety
 
-            for i in range(1, text_records):
+            for i in range(1, text_records + 1):
                 if i >= len(records) - 1:
                     break
 
@@ -352,14 +352,14 @@ class ToMobiConverter(BaseConverter):
         html_parts.append('</body></html>')
         html_content = ''.join(html_parts)
 
-        # Compress HTML with PalmDOC
-        compressed_text = self._palmdoc_compress(html_content.encode('utf-8'))
+        # Use uncompressed text (compression type 1)
+        text_data = html_content.encode('utf-8')
 
         # Split into 4KB records
         record_size = 4096
         text_records = []
-        for i in range(0, len(compressed_text), record_size):
-            text_records.append(compressed_text[i:i + record_size])
+        for i in range(0, len(text_data), record_size):
+            text_records.append(text_data[i:i + record_size])
 
         num_text_records = len(text_records)
 
@@ -391,7 +391,7 @@ class ToMobiConverter(BaseConverter):
             record_offset = 78 + (num_text_records + 1) * 8 + 2  # Header + record list + padding
 
             # Record 0: MOBI header
-            mobi_header = self._create_mobi_header(title, len(compressed_text), num_text_records)
+            mobi_header = self._create_mobi_header(title, len(text_data), num_text_records)
             f.write(struct.pack('>I', record_offset))
             f.write(struct.pack('>I', 0))  # attributes + ID
             record_offset += len(mobi_header)
@@ -419,7 +419,7 @@ class ToMobiConverter(BaseConverter):
         header = bytearray()
 
         # PalmDOC header (16 bytes)
-        header.extend(struct.pack('>H', 2))  # compression (2 = PalmDOC)
+        header.extend(struct.pack('>H', 1))  # compression (1 = no compression)
         header.extend(struct.pack('>H', 0))  # unused
         header.extend(struct.pack('>I', text_length))  # text length
         header.extend(struct.pack('>H', num_records))  # number of text records
