@@ -4,9 +4,9 @@
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![Downloads](https://img.shields.io/pypi/dm/convertext)](https://pypi.org/project/convertext/)
 
-**Lightweight universal text converter** for documents and ebooks. Self-contained Python package with native format parsers.
+**Lightweight universal text/document/ebook converter** Self-contained Python based CLI tool with native format parsers.
 
-Convert between all major document and ebook formats with a single terminal command or through a Python API. Get editable .txt, .md or HTML from PDF or ebook formats or make ebooks/PDFs/HTML/etc. from text formats. Batch convert multiple files and send them anywhere in the file system or to your ereader automatically.
+Convert between all major text, document and ebook extensions with a single terminal command or through a Python API. Get editable .txt, .md or HTML from PDF or ebook formats or make ebooks/PDFs/HTML/etc. from text documents. Batch convert multiple files and send them anywhere in the file system or to your ereader automatically. Script converting whole folder structures with different settings per folder.
 
 ## Supported Formats
 
