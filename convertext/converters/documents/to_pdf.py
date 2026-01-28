@@ -104,8 +104,12 @@ class ToPdfConverter(BaseConverter):
         soup = BeautifulSoup(content, 'html.parser')
 
         title_tag = soup.find('title')
-        if title_tag:
-            doc.metadata['title'] = title_tag.get_text()
+        if title_tag and title_tag.get_text().strip():
+            doc.metadata['title'] = title_tag.get_text().strip()
+        else:
+            h1_tag = soup.find('h1')
+            if h1_tag and h1_tag.get_text().strip():
+                doc.metadata['title'] = h1_tag.get_text().strip()
 
         for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol']):
             if element.name.startswith('h'):

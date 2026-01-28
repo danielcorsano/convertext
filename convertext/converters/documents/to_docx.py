@@ -53,7 +53,7 @@ class ToDocxConverter(BaseConverter):
             else:
                 doc = self._read_txt(tmp_path, config)
 
-            return self._create_docx(doc, target_path, config, source_path.stem)
+            return self._create_docx(doc, target_path, config, target_path.stem)
         finally:
             if tmp_path.exists():
                 tmp_path.unlink()
@@ -83,8 +83,12 @@ class ToDocxConverter(BaseConverter):
         soup = BeautifulSoup(content, 'html.parser')
 
         title_tag = soup.find('title')
-        if title_tag:
-            doc.metadata['title'] = title_tag.get_text()
+        if title_tag and title_tag.get_text().strip():
+            doc.metadata['title'] = title_tag.get_text().strip()
+        else:
+            h1_tag = soup.find('h1')
+            if h1_tag and h1_tag.get_text().strip():
+                doc.metadata['title'] = h1_tag.get_text().strip()
 
         for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol']):
             if element.name.startswith('h'):

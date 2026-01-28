@@ -31,7 +31,7 @@ class PdfToEpubConverter(BaseConverter):
 
         # Use PDF metadata for title/author, fall back to filename
         if not doc.metadata.get('title'):
-            doc.metadata['title'] = source_path.stem
+            doc.metadata['title'] = target_path.stem
         if not doc.metadata.get('author'):
             doc.metadata['author'] = 'Unknown'
 
