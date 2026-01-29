@@ -391,8 +391,11 @@ class ToMobiConverter(BaseConverter):
         # Build record 0 (PalmDOC + MOBI + EXTH + title)
         record0 = self._create_record0(title, text_length, num_text_records, exth)
 
+        # Add EOF marker record (required for Kindle compatibility)
+        eof_record = b'\xe9\x8e\x0d\x0a'  # Standard MOBI EOF marker
+
         # Calculate offsets
-        num_records = num_text_records + 1
+        num_records = num_text_records + 2  # record0 + text records + EOF
         header_size = 78
         record_list_size = num_records * 8
         padding = 2
@@ -403,6 +406,7 @@ class ToMobiConverter(BaseConverter):
         for rec in compressed_records:
             record_offsets.append(offset)
             offset += len(rec)
+        record_offsets.append(offset)  # EOF record offset
 
         # Write file
         with open(path, 'wb') as f:
@@ -423,10 +427,10 @@ class ToMobiConverter(BaseConverter):
             f.write(struct.pack('>I', 0))   # nextRecordListID
             f.write(struct.pack('>H', num_records))
 
-            # Record list
+            # Record list (offset + attributes byte + 3-byte unique ID)
             for i, off in enumerate(record_offsets):
                 f.write(struct.pack('>I', off))
-                f.write(struct.pack('>I', i << 16))
+                f.write(struct.pack('>I', i))  # attributes=0 + 24-bit ID
 
             f.write(b'\x00\x00')  # padding
 
@@ -436,6 +440,9 @@ class ToMobiConverter(BaseConverter):
             # Text records
             for rec in compressed_records:
                 f.write(rec)
+
+            # EOF record
+            f.write(eof_record)
 
         return True
 
@@ -464,7 +471,7 @@ class ToMobiConverter(BaseConverter):
 
         return header
 
-    def _create_record0(self, title: str, text_length: int, num_records: int, exth: bytes) -> bytes:
+    def _create_record0(self, title: str, text_length: int, num_text_records: int, exth: bytes) -> bytes:
         """Create record 0 with PalmDOC, MOBI, and EXTH headers."""
         title_bytes = title.encode('utf-8')
 
@@ -480,7 +487,7 @@ class ToMobiConverter(BaseConverter):
         header.extend(struct.pack('>H', 2))      # compression = PalmDOC
         header.extend(struct.pack('>H', 0))      # unused
         header.extend(struct.pack('>I', text_length))
-        header.extend(struct.pack('>H', num_records))
+        header.extend(struct.pack('>H', num_text_records))
         header.extend(struct.pack('>H', 4096))   # record size
         header.extend(struct.pack('>H', 0))      # encryption
         header.extend(struct.pack('>H', 0))      # unknown
@@ -490,16 +497,18 @@ class ToMobiConverter(BaseConverter):
         header.extend(struct.pack('>I', mobi_len))
         header.extend(struct.pack('>I', 2))      # type = book
         header.extend(struct.pack('>I', 65001))  # encoding = UTF-8
-        header.extend(struct.pack('>I', 0xffffffff))  # UID
-        header.extend(struct.pack('>I', 6))      # version
-        header.extend(b'\xff' * 40)              # indexes (all unused)
-        header.extend(struct.pack('>I', num_records + 1))  # first non-book
+        header.extend(struct.pack('>I', 0))      # UID (use 0 for compatibility)
+        header.extend(struct.pack('>I', 4))      # version (4 for wider Kindle support)
+        # Index fields (all set to 0xffffffff = not present)
+        for _ in range(10):  # 10 index fields, 4 bytes each
+            header.extend(struct.pack('>I', 0xffffffff))
+        header.extend(struct.pack('>I', num_text_records + 1))  # first non-book = EOF record
         header.extend(struct.pack('>I', full_name_offset))
         header.extend(struct.pack('>I', len(title_bytes)))
         header.extend(struct.pack('>I', 1033))   # locale
         header.extend(struct.pack('>I', 0))      # input lang
         header.extend(struct.pack('>I', 0))      # output lang
-        header.extend(struct.pack('>I', 6))      # min version
+        header.extend(struct.pack('>I', 4))      # min version (match version)
         header.extend(struct.pack('>I', 0))      # first image
         header.extend(struct.pack('>I', 0))      # huffman offset
         header.extend(struct.pack('>I', 0))      # huffman count
@@ -513,7 +522,7 @@ class ToMobiConverter(BaseConverter):
         header.extend(struct.pack('>I', 0))
         header.extend(b'\x00' * 8)
         header.extend(struct.pack('>H', 1))      # first content record
-        header.extend(struct.pack('>H', num_records))  # last content record
+        header.extend(struct.pack('>H', num_text_records))  # last content record
         header.extend(struct.pack('>I', 1))
         header.extend(struct.pack('>I', 0))      # FCIS
         header.extend(struct.pack('>I', 0))
