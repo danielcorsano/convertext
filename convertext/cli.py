@@ -29,11 +29,6 @@ from convertext.converters.loader import load_converters
     help='Path to custom config file'
 )
 @click.option(
-    '--quality',
-    type=click.Choice(['low', 'medium', 'high']),
-    help='Conversion quality preset'
-)
-@click.option(
     '--overwrite',
     is_flag=True,
     help='Overwrite existing files'
@@ -68,7 +63,6 @@ def main(
     output_formats: Optional[str],
     output: Optional[str],
     config: Optional[str],
-    quality: Optional[str],
     overwrite: bool,
     list_formats: bool,
     init_config: bool,
@@ -116,13 +110,9 @@ def main(
     overrides = {}
     if output:
         overrides['output'] = {'directory': output}
-    if quality:
-        overrides['conversion'] = {'quality': quality}
     if overwrite:
         overrides['output'] = overrides.get('output', {})
         overrides['output']['overwrite'] = True
-    if verbose:
-        overrides['logging'] = {'verbose': True}
 
     if overrides:
         cfg.override(overrides)

@@ -221,7 +221,7 @@ class ToFB2Converter(BaseConverter):
         else:
             return False
 
-        return self._create_fb2(doc, target_path, config, source_path.stem)
+        return self._create_fb2(doc, target_path, config, target_path.stem)
 
     def _read_txt(self, path: Path, config: Dict[str, Any]) -> Document:
         """Read plain text into Document."""
@@ -248,8 +248,12 @@ class ToFB2Converter(BaseConverter):
         soup = BeautifulSoup(content, 'html.parser')
 
         title_tag = soup.find('title')
-        if title_tag:
-            doc.metadata['title'] = title_tag.get_text()
+        if title_tag and title_tag.get_text().strip():
+            doc.metadata['title'] = title_tag.get_text().strip()
+        else:
+            h1_tag = soup.find('h1')
+            if h1_tag and h1_tag.get_text().strip():
+                doc.metadata['title'] = h1_tag.get_text().strip()
 
         for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
             if element.name.startswith('h'):

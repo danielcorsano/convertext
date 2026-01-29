@@ -41,7 +41,7 @@ class MobiConverter(BaseConverter):
 
         with open(path, 'rb') as f:
             # Read PalmDB header
-            f.seek(60)  # Skip to record count
+            f.seek(76)  # Skip to record count (at byte 76-77)
             num_records = struct.unpack('>H', f.read(2))[0]
 
             # Read record info list
@@ -63,7 +63,7 @@ class MobiConverter(BaseConverter):
             html_parts = []
             text_records = min(num_records - 1, 1000)  # Limit for safety
 
-            for i in range(1, text_records):
+            for i in range(1, text_records + 1):
                 if i >= len(records) - 1:
                     break
 
@@ -265,7 +265,7 @@ class ToMobiConverter(BaseConverter):
         else:
             return False
 
-        return self._create_mobi(doc, target_path, source_path.stem)
+        return self._create_mobi(doc, target_path, target_path.stem)
 
     def _read_txt(self, path: Path, config: Dict[str, Any]) -> Document:
         """Read plain text into Document."""
@@ -274,9 +274,27 @@ class ToMobiConverter(BaseConverter):
 
         with open(path, 'r', encoding=encoding) as f:
             content = f.read()
-            for para in content.split('\n\n'):
-                if para.strip():
-                    doc.add_paragraph(para.strip())
+
+        lines = content.split('\n')
+        i = 0
+
+        # Check for title pattern: "Title\n=====" at start
+        if len(lines) >= 2 and lines[1].strip() and all(c == '=' for c in lines[1].strip()):
+            doc.metadata['title'] = lines[0].strip()
+            i = 2
+            # Skip author line if present
+            if i < len(lines) and lines[i].startswith('By:'):
+                doc.metadata['author'] = lines[i][3:].strip()
+                i += 1
+            # Skip blank line after header
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+
+        # Process remaining content as paragraphs
+        remaining = '\n'.join(lines[i:])
+        for para in remaining.split('\n\n'):
+            if para.strip():
+                doc.add_paragraph(para.strip())
 
         return doc
 
@@ -292,8 +310,12 @@ class ToMobiConverter(BaseConverter):
         soup = BeautifulSoup(content, 'html.parser')
 
         title_tag = soup.find('title')
-        if title_tag:
-            doc.metadata['title'] = title_tag.get_text()
+        if title_tag and title_tag.get_text().strip():
+            doc.metadata['title'] = title_tag.get_text().strip()
+        else:
+            h1_tag = soup.find('h1')
+            if h1_tag and h1_tag.get_text().strip():
+                doc.metadata['title'] = h1_tag.get_text().strip()
 
         for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
             if element.name.startswith('h'):
@@ -329,138 +351,203 @@ class ToMobiConverter(BaseConverter):
         return doc
 
     def _create_mobi(self, doc: Document, path: Path, default_title: str) -> bool:
-        """Create MOBI file - native PalmDB implementation."""
+        """Create MOBI file with PalmDOC compression for Kindle compatibility."""
         import time
 
-        title = doc.metadata.get('title', default_title)[:31]  # Max 32 chars for PalmDB name
+        title = doc.metadata.get('title', default_title)
+        author = doc.metadata.get('author', 'Unknown')
+        palm_name = title[:31]
 
         # Generate HTML content
         html_parts = ['<html><head><meta charset="utf-8"/></head><body>']
-
-        if doc.metadata.get('title'):
-            html_parts.append(f'<h1>{self._escape_html(doc.metadata["title"])}</h1>')
-        if doc.metadata.get('author'):
-            html_parts.append(f'<p><em>{self._escape_html(doc.metadata["author"])}</em></p>')
-
+        if title:
+            html_parts.append(f'<h1>{self._escape_html(title)}</h1>')
+        if author and author != 'Unknown':
+            html_parts.append(f'<p><em>{self._escape_html(author)}</em></p>')
         for block in doc.content:
             if block['type'] == 'paragraph':
                 html_parts.append(f'<p>{self._escape_html(block["data"])}</p>')
             elif block['type'] == 'heading':
                 level = block['level']
                 html_parts.append(f'<h{level}>{self._escape_html(block["data"])}</h{level}>')
-
         html_parts.append('</body></html>')
-        html_content = ''.join(html_parts)
 
-        # Compress HTML with PalmDOC
-        compressed_text = self._palmdoc_compress(html_content.encode('utf-8'))
+        text_data = ''.join(html_parts).encode('utf-8')
+        text_length = len(text_data)
 
-        # Split into 4KB records
+        # Compress with PalmDOC (type 2) for Kindle
+        compressed_records = []
         record_size = 4096
-        text_records = []
-        for i in range(0, len(compressed_text), record_size):
-            text_records.append(compressed_text[i:i + record_size])
+        for i in range(0, len(text_data), record_size):
+            chunk = text_data[i:i + record_size]
+            compressed = self._palmdoc_compress(chunk)
+            compressed_records.append(compressed)
 
-        num_text_records = len(text_records)
+        num_text_records = len(compressed_records)
 
-        # Build PalmDB file
+        # Build EXTH header
+        exth = self._create_exth(title, author)
+
+        # Build record 0 (PalmDOC + MOBI + EXTH + title)
+        record0 = self._create_record0(title, text_length, num_text_records, exth)
+
+        # Add EOF marker record (required for Kindle compatibility)
+        eof_record = b'\xe9\x8e\x0d\x0a'  # Standard MOBI EOF marker
+
+        # Calculate offsets
+        num_records = num_text_records + 2  # record0 + text records + EOF
+        header_size = 78
+        record_list_size = num_records * 8
+        padding = 2
+        record0_offset = header_size + record_list_size + padding
+
+        record_offsets = [record0_offset]
+        offset = record0_offset + len(record0)
+        for rec in compressed_records:
+            record_offsets.append(offset)
+            offset += len(rec)
+        record_offsets.append(offset)  # EOF record offset
+
+        # Write file
         with open(path, 'wb') as f:
-            # PalmDB header (78 bytes)
-            name_bytes = title.encode('utf-8')[:31].ljust(32, b'\x00')
-            f.write(name_bytes)
+            # PalmDB header
+            f.write(palm_name.encode('utf-8')[:31].ljust(32, b'\x00'))
+            f.write(struct.pack('>H', 0))  # attributes
+            f.write(struct.pack('>H', 0))  # version
+            ts = int(time.time()) + 2082844800
+            f.write(struct.pack('>I', ts))  # creation
+            f.write(struct.pack('>I', ts))  # modification
+            f.write(struct.pack('>I', 0))   # backup
+            f.write(struct.pack('>I', 0))   # modificationNumber
+            f.write(struct.pack('>I', 0))   # appInfoID
+            f.write(struct.pack('>I', 0))   # sortInfoID
+            f.write(b'BOOK')
+            f.write(b'MOBI')
+            f.write(struct.pack('>I', 0))   # uniqueIDSeed
+            f.write(struct.pack('>I', 0))   # nextRecordListID
+            f.write(struct.pack('>H', num_records))
 
-            attributes = 0
-            version = 0
-            creation_time = modification_time = backup_time = int(time.time()) + 2082844800  # Palm epoch
+            # Record list (offset + attributes byte + 3-byte unique ID)
+            for i, off in enumerate(record_offsets):
+                f.write(struct.pack('>I', off))
+                f.write(struct.pack('>I', i))  # attributes=0 + 24-bit ID
 
-            f.write(struct.pack('>H', attributes))
-            f.write(struct.pack('>H', version))
-            f.write(struct.pack('>I', creation_time))
-            f.write(struct.pack('>I', modification_time))
-            f.write(struct.pack('>I', backup_time))
-            f.write(struct.pack('>I', 0))  # modification number
-            f.write(struct.pack('>I', 0))  # appInfoID
-            f.write(struct.pack('>I', 0))  # sortInfoID
-            f.write(b'BOOK')  # type
-            f.write(b'MOBI')  # creator
-            f.write(struct.pack('>I', 0))  # uniqueIDSeed
-            f.write(struct.pack('>I', 0))  # nextRecordListID
-            f.write(struct.pack('>H', num_text_records + 1))  # number of records (text + MOBI header)
+            f.write(b'\x00\x00')  # padding
 
-            # Record info list (8 bytes per record)
-            record_offset = 78 + (num_text_records + 1) * 8 + 2  # Header + record list + padding
-
-            # Record 0: MOBI header
-            mobi_header = self._create_mobi_header(title, len(compressed_text), num_text_records)
-            f.write(struct.pack('>I', record_offset))
-            f.write(struct.pack('>I', 0))  # attributes + ID
-            record_offset += len(mobi_header)
+            # Record 0
+            f.write(record0)
 
             # Text records
-            for i, record in enumerate(text_records, 1):
-                f.write(struct.pack('>I', record_offset))
-                f.write(struct.pack('>I', 0))
-                record_offset += len(record)
+            for rec in compressed_records:
+                f.write(rec)
 
-            # Padding
-            f.write(b'\x00\x00')
-
-            # Write record 0 (MOBI header)
-            f.write(mobi_header)
-
-            # Write text records
-            for record in text_records:
-                f.write(record)
+            # EOF record
+            f.write(eof_record)
 
         return True
 
-    def _create_mobi_header(self, title: str, text_length: int, num_records: int) -> bytes:
-        """Create MOBI header record."""
+    def _create_exth(self, title: str, author: str) -> bytes:
+        """Create EXTH header with metadata."""
+        records = []
+
+        # Author (100)
+        author_bytes = author.encode('utf-8')
+        records.append(struct.pack('>II', 100, 8 + len(author_bytes)) + author_bytes)
+
+        # Title (503)
+        title_bytes = title.encode('utf-8')
+        records.append(struct.pack('>II', 503, 8 + len(title_bytes)) + title_bytes)
+
+        exth_data = b''.join(records)
+        exth_len = 12 + len(exth_data)
+        # Pad to 4-byte boundary
+        padding = (4 - (exth_len % 4)) % 4
+
+        header = b'EXTH'
+        header += struct.pack('>I', exth_len + padding)
+        header += struct.pack('>I', len(records))
+        header += exth_data
+        header += b'\x00' * padding
+
+        return header
+
+    def _create_record0(self, title: str, text_length: int, num_text_records: int, exth: bytes) -> bytes:
+        """Create record 0 with PalmDOC, MOBI, and EXTH headers."""
+        title_bytes = title.encode('utf-8')
+
+        # MOBI header length (without PalmDOC header)
+        mobi_len = 232
+
+        # Full name comes after MOBI header + EXTH
+        full_name_offset = 16 + mobi_len + len(exth)
+
         header = bytearray()
 
         # PalmDOC header (16 bytes)
-        header.extend(struct.pack('>H', 2))  # compression (2 = PalmDOC)
-        header.extend(struct.pack('>H', 0))  # unused
-        header.extend(struct.pack('>I', text_length))  # text length
-        header.extend(struct.pack('>H', num_records))  # number of text records
-        header.extend(struct.pack('>H', 4096))  # max record size
-        header.extend(struct.pack('>H', 0))  # encryption type
-        header.extend(struct.pack('>H', 0))  # unknown
+        header.extend(struct.pack('>H', 2))      # compression = PalmDOC
+        header.extend(struct.pack('>H', 0))      # unused
+        header.extend(struct.pack('>I', text_length))
+        header.extend(struct.pack('>H', num_text_records))
+        header.extend(struct.pack('>H', 4096))   # record size
+        header.extend(struct.pack('>H', 0))      # encryption
+        header.extend(struct.pack('>H', 0))      # unknown
 
-        # MOBI header identifier
+        # MOBI header
         header.extend(b'MOBI')
-        header.extend(struct.pack('>I', 232))  # header length
-        header.extend(struct.pack('>I', 2))  # Mobi type (2 = Mobipocket book)
-        header.extend(struct.pack('>I', 65001))  # text encoding (UTF-8)
-        header.extend(struct.pack('>I', 0))  # unique ID
-        header.extend(struct.pack('>I', 6))  # file version
-        header.extend(b'\xff' * 40)  # reserved
-        header.extend(struct.pack('>I', 0))  # first non-book index
-        header.extend(struct.pack('>I', 0xffffffff))  # full name offset
-        header.extend(struct.pack('>I', len(title.encode('utf-8'))))  # full name length
-        header.extend(struct.pack('>I', 1033))  # locale
-        header.extend(struct.pack('>I', 0))  # input language
-        header.extend(struct.pack('>I', 0))  # output language
-        header.extend(struct.pack('>I', 6))  # min version
-        header.extend(struct.pack('>I', 0))  # first image index
-        header.extend(struct.pack('>I', 0))  # first huff record
-        header.extend(struct.pack('>I', 0))  # huff record count
-        header.extend(struct.pack('>I', 0))  # first DATP record
-        header.extend(struct.pack('>I', 0))  # DATP record count
-        header.extend(struct.pack('>I', 1))  # EXTH flags (has EXTH)
-        header.extend(b'\x00' * 36)  # reserved
-        header.extend(struct.pack('>I', 0xffffffff))  # DRM offset
-        header.extend(struct.pack('>I', 0xffffffff))  # DRM count
-        header.extend(struct.pack('>I', 0xffffffff))  # DRM size
-        header.extend(struct.pack('>I', 0xffffffff))  # DRM flags
-        header.extend(b'\x00' * 62)  # reserved
+        header.extend(struct.pack('>I', mobi_len))
+        header.extend(struct.pack('>I', 2))      # type = book
+        header.extend(struct.pack('>I', 65001))  # encoding = UTF-8
+        header.extend(struct.pack('>I', 0))      # UID (use 0 for compatibility)
+        header.extend(struct.pack('>I', 4))      # version (4 for wider Kindle support)
+        # Index fields (all set to 0xffffffff = not present)
+        for _ in range(10):  # 10 index fields, 4 bytes each
+            header.extend(struct.pack('>I', 0xffffffff))
+        header.extend(struct.pack('>I', num_text_records + 1))  # first non-book = EOF record
+        header.extend(struct.pack('>I', full_name_offset))
+        header.extend(struct.pack('>I', len(title_bytes)))
+        header.extend(struct.pack('>I', 1033))   # locale
+        header.extend(struct.pack('>I', 0))      # input lang
+        header.extend(struct.pack('>I', 0))      # output lang
+        header.extend(struct.pack('>I', 4))      # min version (match version)
+        header.extend(struct.pack('>I', 0))      # first image
+        header.extend(struct.pack('>I', 0))      # huffman offset
+        header.extend(struct.pack('>I', 0))      # huffman count
+        header.extend(struct.pack('>I', 0))      # huffman table offset
+        header.extend(struct.pack('>I', 0))      # huffman table len
+        header.extend(struct.pack('>I', 0x50))   # EXTH flags (has EXTH)
+        header.extend(b'\x00' * 32)              # unknown
+        header.extend(struct.pack('>I', 0xffffffff))  # DRM
+        header.extend(struct.pack('>I', 0))
+        header.extend(struct.pack('>I', 0))
+        header.extend(struct.pack('>I', 0))
+        header.extend(b'\x00' * 8)
+        header.extend(struct.pack('>H', 1))      # first content record
+        header.extend(struct.pack('>H', num_text_records))  # last content record
+        header.extend(struct.pack('>I', 1))
+        header.extend(struct.pack('>I', 0))      # FCIS
+        header.extend(struct.pack('>I', 0))
+        header.extend(struct.pack('>I', 0))      # FLIS
+        header.extend(struct.pack('>I', 0))
+        header.extend(b'\x00' * 8)
+        header.extend(struct.pack('>I', 0xffffffff))
+        header.extend(struct.pack('>I', 0))
+        header.extend(struct.pack('>I', 0xffffffff))
+        header.extend(struct.pack('>I', 0xffffffff))
+        header.extend(struct.pack('>I', 0))      # extra flags
 
-        # Pad to reach declared header length
-        while len(header) < 16 + 232:
+        # Pad MOBI header to declared length
+        while len(header) < 16 + mobi_len:
             header.append(0)
 
-        # Full title at end
-        header.extend(title.encode('utf-8'))
+        # EXTH
+        header.extend(exth)
+
+        # Full title
+        header.extend(title_bytes)
+
+        # Pad to 4-byte boundary
+        while len(header) % 4 != 0:
+            header.append(0)
 
         return bytes(header)
 

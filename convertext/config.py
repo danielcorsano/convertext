@@ -13,73 +13,9 @@ class Config:
             "directory": None,
             "filename_pattern": "{name}.{ext}",
             "overwrite": False,
-            "preserve_structure": True,
-            "create_backup": False,
-        },
-        "conversion": {
-            "quality": "medium",
-            "preserve_metadata": True,
-            "preserve_formatting": True,
-            "preserve_images": True,
-            "extract_toc": True,
         },
         "documents": {
             "encoding": "utf-8",
-            "embed_fonts": True,
-            "font_fallback": "Liberation Sans",
-            "image_quality": 85,
-            "dpi": 300,
-            "pdf": {
-                "compression": True,
-                "optimize": True,
-                "linearize": False,
-                "pdf_version": "1.7",
-            },
-            "docx": {
-                "style_preservation": True,
-                "embed_images": True,
-            },
-            "odt": {
-                "style_preservation": True,
-            },
-        },
-        "ebooks": {
-            "epub": {
-                "version": 3,
-                "split_chapters": True,
-                "toc_depth": 3,
-                "cover_auto_detect": True,
-                "stylesheet": None,
-            },
-            "mobi": {
-                "compression_level": 1,
-                "prefer_azw3": True,
-            },
-            "fb2": {
-                "validation": True,
-                "include_binary_images": True,
-            },
-        },
-        "comics": {
-            "image_format": "jpeg",
-            "image_quality": 90,
-            "max_image_width": 2048,
-            "max_image_height": 2048,
-            "preserve_order": True,
-        },
-        "processing": {
-            "parallel": True,
-            "max_workers": 4,
-            "temp_dir": None,
-            "cleanup_temp": True,
-            "chunk_size": 4096,
-        },
-        "logging": {
-            "level": "INFO",
-            "file": None,
-            "format": "%(levelname)s: %(message)s",
-            "verbose": False,
-            "show_progress": True,
         },
     }
 
