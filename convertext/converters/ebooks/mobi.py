@@ -514,7 +514,7 @@ class ToMobiConverter(BaseConverter):
         header.extend(struct.pack('>I', 0))      # huffman count
         header.extend(struct.pack('>I', 0))      # huffman table offset
         header.extend(struct.pack('>I', 0))      # huffman table len
-        header.extend(struct.pack('>I', 0x50))   # EXTH flags (has EXTH)
+        header.extend(struct.pack('>I', 0x40))   # EXTH flags (bit 6 = has EXTH)
         header.extend(b'\x00' * 32)              # unknown
         header.extend(struct.pack('>I', 0xffffffff))  # DRM
         header.extend(struct.pack('>I', 0))
@@ -590,16 +590,20 @@ class ToMobiConverter(BaseConverter):
                 code = 0xC000 | ((best_dist - 1) << 3) | (best_len - 3)
                 result.extend(struct.pack('>H', code))
                 i += best_len
+            elif 0x09 <= data[i] <= 0x7F:
+                # Safe literal range - output directly
+                result.append(data[i])
+                i += 1
             else:
-                # Simple encoding
-                c = data[i]
-                if c == 0x20 and i + 1 < len(data) and 0x40 <= data[i + 1] <= 0x7F:
-                    # Space + ASCII optimization
-                    result.append(data[i + 1] ^ 0x80)
-                    i += 2
-                else:
-                    result.append(c)
-                    i += 1
+                # Unsafe byte (0x00-0x08 or 0x80-0xFF) - escape via literal copy
+                # Batch consecutive unsafe bytes (up to 8)
+                end = i + 1
+                while end < len(data) and end - i < 8 and not (0x09 <= data[end] <= 0x7F):
+                    end += 1
+                count = end - i
+                result.append(count)
+                result.extend(data[i:end])
+                i = end
 
         return bytes(result)
 
