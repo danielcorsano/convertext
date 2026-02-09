@@ -23,14 +23,11 @@ def load_converters():
     register_converter(ToEpubConverter())
     register_converter(PdfToEpubConverter())
 
-    # Optional converters (gracefully skip if dependencies missing)
-    try:
-        from convertext.converters.ebooks.mobi import MobiConverter, ToMobiConverter
-        register_converter(MobiConverter())
-        register_converter(ToMobiConverter())
-    except ImportError:
-        pass  # MOBI support not installed
+    from convertext.converters.ebooks.azw3 import Azw3Converter, ToAzw3Converter
+    register_converter(Azw3Converter())
+    register_converter(ToAzw3Converter())
 
+    # Optional converters (gracefully skip if dependencies missing)
     try:
         from convertext.converters.ebooks.fb2 import FB2Converter, ToFB2Converter
         register_converter(FB2Converter())

@@ -11,7 +11,7 @@ def convert(source: Union[str, Path], format: str, output: Optional[str] = None,
 
     Args:
         source: Source file path
-        format: Target format (epub, mobi, pdf, html, etc.)
+        format: Target format (epub, azw3, pdf, html, etc.)
         output: Output directory (optional)
         **kwargs: overwrite, keep_intermediate, etc.
 

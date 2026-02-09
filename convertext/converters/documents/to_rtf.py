@@ -12,7 +12,7 @@ class ToRtfConverter(BaseConverter):
 
     @property
     def input_formats(self) -> List[str]:
-        return ['txt', 'html', 'md', 'pdf', 'docx', 'odt', 'epub', 'mobi', 'fb2']
+        return ['txt', 'html', 'md', 'pdf', 'docx', 'odt', 'epub', 'azw3', 'fb2']
 
     @property
     def output_formats(self) -> List[str]:

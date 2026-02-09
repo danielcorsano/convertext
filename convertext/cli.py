@@ -16,7 +16,7 @@ from convertext.converters.loader import load_converters
 @click.option(
     '--format', '-f',
     'output_formats',
-    help='Output format(s), comma-separated (e.g., epub,pdf,mobi)'
+    help='Output format(s), comma-separated (e.g., epub,pdf,azw3)'
 )
 @click.option(
     '--output', '-o',

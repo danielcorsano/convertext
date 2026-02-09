@@ -5,7 +5,7 @@ description = "Lightweight universal text/ebook/document format converter with C
 readme = "README.md"
 license = "MIT"
 authors = [{name = "danielcorsano"}]
-keywords = ["conversion", "ebook", "pdf", "epub", "mobi", "docx", "document"]
+keywords = ["conversion", "ebook", "pdf", "epub", "azw3", "docx", "document"]
 requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 3 - Alpha",

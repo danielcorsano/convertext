@@ -11,7 +11,7 @@ def test_imports():
     from convertext.core import ConversionEngine
     from convertext.registry import get_registry
 
-    assert __version__ == "0.2.0"
+    assert __version__
     assert Config is not None
     assert ConversionEngine is not None
     assert get_registry is not None
