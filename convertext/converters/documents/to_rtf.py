@@ -46,6 +46,7 @@ class ToRtfConverter(BaseConverter):
                 doc = self._read_html(tmp_path, config)
             else:
                 doc = self._read_txt(tmp_path, config)
+            self._apply_metadata_overrides(doc, source_path, config)
 
             return self._create_rtf(doc, target_path, config)
         finally:

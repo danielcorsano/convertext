@@ -27,6 +27,7 @@ class EpubConverter(BaseConverter):
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert EPUB to target format."""
         doc = self._read_epub(source_path, config)
+        self._apply_metadata_overrides(doc, source_path, config)
 
         target_fmt = target_path.suffix.lstrip('.').lower()
         if target_fmt == 'txt':
@@ -204,6 +205,7 @@ class ToEpubConverter(BaseConverter):
             doc = self._read_markdown(source_path, config)
         else:
             return False
+        self._apply_metadata_overrides(doc, source_path, config)
 
         return self._create_epub(doc, target_path, config, target_path.stem)
 

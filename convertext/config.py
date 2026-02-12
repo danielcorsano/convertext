@@ -16,6 +16,7 @@ class Config:
         },
         "documents": {
             "encoding": "utf-8",
+            "title_from_filename": False,
         },
     }
 

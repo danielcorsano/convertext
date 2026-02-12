@@ -248,6 +248,7 @@ documents:
 | `output.filename_pattern` | | `{name}.{ext}` | Output filename pattern |
 | `output.overwrite` | | `false` | Overwrite existing files |
 | `documents.encoding` | | `utf-8` | Text file encoding |
+| `documents.title_from_filename` | | `false` | Use filename as document title |
 
 ## CLI Reference
 

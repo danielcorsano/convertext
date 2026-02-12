@@ -26,6 +26,7 @@ class MarkdownConverter(BaseConverter):
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert Markdown to target format."""
         doc = self._read_markdown(source_path, config)
+        self._apply_metadata_overrides(doc, source_path, config)
 
         target_fmt = target_path.suffix.lstrip('.').lower()
         if target_fmt == 'html':

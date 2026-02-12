@@ -124,6 +124,11 @@ class BaseConverter(ABC):
             return False
         return True
 
+    def _apply_metadata_overrides(self, doc: Document, source_path: Path, config: Dict[str, Any]):
+        """Apply config-driven metadata overrides."""
+        if config.get('documents', {}).get('title_from_filename', False):
+            doc.metadata['title'] = source_path.stem
+
     def extract_metadata(self, source_path: Path) -> Dict[str, Any]:
         """Extract metadata from source file."""
         return {}

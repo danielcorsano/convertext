@@ -46,9 +46,11 @@ class ToPdfConverter(BaseConverter):
         # If source is already HTML or TXT, read directly
         if source_fmt in ['html', 'htm']:
             doc = self._read_html(source_path, config)
+            self._apply_metadata_overrides(doc, source_path, config)
             return self._create_pdf(doc, target_path, config)
         elif source_fmt == 'txt':
             doc = self._read_txt(source_path, config)
+            self._apply_metadata_overrides(doc, source_path, config)
             return self._create_pdf(doc, target_path, config)
 
         # Otherwise, convert to intermediate format first
@@ -73,6 +75,7 @@ class ToPdfConverter(BaseConverter):
                 doc = self._read_html(tmp_path, config)
             else:
                 doc = self._read_txt(tmp_path, config)
+            self._apply_metadata_overrides(doc, source_path, config)
 
             return self._create_pdf(doc, target_path, config)
         finally:

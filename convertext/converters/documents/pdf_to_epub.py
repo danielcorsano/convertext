@@ -28,6 +28,7 @@ class PdfToEpubConverter(BaseConverter):
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert PDF to EPUB directly."""
         doc = self._read_pdf(source_path, config)
+        self._apply_metadata_overrides(doc, source_path, config)
 
         # Use PDF metadata for title/author, fall back to filename
         if not doc.metadata.get('title'):

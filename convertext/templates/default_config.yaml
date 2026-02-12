@@ -9,3 +9,4 @@ output:
 # Text/Document options
 documents:
   encoding: utf-8
+  title_from_filename: false    # override title with filename (without extension)

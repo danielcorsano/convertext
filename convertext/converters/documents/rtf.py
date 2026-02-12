@@ -34,6 +34,7 @@ class RtfConverter(BaseConverter):
             raise ImportError("RTF support requires 'striprtf' package. Install with: pip install convertext[rtf]")
 
         doc = self._read_rtf(source_path, config)
+        self._apply_metadata_overrides(doc, source_path, config)
 
         target_fmt = target_path.suffix.lstrip('.').lower()
         if target_fmt == 'txt':
