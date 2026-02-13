@@ -106,6 +106,10 @@ class Azw3Converter(BaseConverter):
                 if extra_data_flags & 1 and len(record_data) > 0:
                     trail_size = (record_data[-1] & 0b11) + 1
                     record_data = record_data[:-trail_size]
+                elif extra_data_flags & 2 and len(record_data) > 0:
+                    # multibyte trailing: last byte encodes count, strip it + that many bytes
+                    n = record_data[-1] & 0b11
+                    record_data = record_data[:-(n + 1)]
 
                 try:
                     if compression == 2:
@@ -357,7 +361,9 @@ class ToAzw3Converter(BaseConverter):
 
         compressed_records = []
         for rec in raw_records:
-            compressed_records.append(_palmdoc_compress(rec) + b'\x00')
+            # Trailing bytes for extra_data_flags=3:
+            # \x00 = multibyte indicator (0 split chars), \x81 = overlap marker (strip 2 bytes total)
+            compressed_records.append(_palmdoc_compress(rec) + b'\x00\x81')
 
         chunk_indx = _build_chunk_indx(chunk_infos, text_length)
         skel_indx = _build_skel_indx(chunk_infos)
@@ -746,7 +752,7 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xE0: SRCS (none)
     h += struct.pack('>I', 0)                           # 0xE4: SRCS count
     h += struct.pack('>II', 0xFFFFFFFF, 0xFFFFFFFF)     # 0xE8-0xEF: unknown
-    h += struct.pack('>I', 1)                           # 0xF0: extra data flags (overlap)
+    h += struct.pack('>I', 3)                           # 0xF0: extra data flags (bits 0+1)
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xF4: NCX index (none)
     h += struct.pack('>I', chunk_idx)                   # 0xF8: chunk index
     h += struct.pack('>I', skel_idx)                    # 0xFC: skeleton index
@@ -762,8 +768,11 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
 
     h += exth
     h += title_bytes
-    pad = (4 - (len(h) % 4)) % 4
-    h += b'\x00' * (pad + 4)
+    # Pad to 8192 bytes after title for Kindle firmware compatibility
+    # (Calibre uses the same 8KB padding — firmware may assume minimum rec0 size)
+    current_len = len(h)
+    target_len = max(current_len, 16 + mobi_len) + 8192
+    h += b'\x00' * (target_len - len(h))
 
     return bytes(h)
 
@@ -784,6 +793,9 @@ def _build_exth(title: str, author: str) -> bytes:
 
     tb = title.encode('utf-8')
     records.append(struct.pack('>II', 503, 8 + len(tb)) + tb)
+
+    records.append(struct.pack('>III', 125, 12, 0))   # num_of_resources
+    records.append(struct.pack('>III', 131, 12, 0))   # kf8_unknown_count
 
     data = b''.join(records)
     raw_len = 12 + len(data)

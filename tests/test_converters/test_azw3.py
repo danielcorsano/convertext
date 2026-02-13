@@ -374,8 +374,8 @@ def test_azw3_kf8_header_offsets():
         assert fdst_idx != 0xFFFFFFFF, "FDST index should be set for KF8"
         # FDST count at 0xC4
         assert struct.unpack('>I', data[0xC4:0xC8])[0] == 1
-        # Extra data flags at 0xF0 = 1
-        assert struct.unpack('>I', data[0xF0:0xF4])[0] == 1
+        # Extra data flags at 0xF0 = 3 (bits 0+1: overlap + multibyte trailing)
+        assert struct.unpack('>I', data[0xF0:0xF4])[0] == 3
         # Chunk index at 0xF8 (should be valid)
         chunk_idx = struct.unpack('>I', data[0xF8:0xFC])[0]
         assert chunk_idx != 0xFFFFFFFF, "Chunk index should be set for KF8"
