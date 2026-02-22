@@ -309,9 +309,6 @@ def _independent_parse_kf8(path):
         rec_start = record_offsets[i]
         rec_end = record_offsets[i+1] if i+1 < len(record_offsets) else len(data)
         rec_data = data[rec_start:rec_end]
-        if extra_data_flags & 1:
-            trail_size = (rec_data[-1] & 0b11) + 1
-            rec_data = rec_data[:-trail_size]
         if compression == 2:
             text_parts.append(palmdoc_decompress(rec_data))
         else:
@@ -374,8 +371,8 @@ def test_azw3_kf8_header_offsets():
         assert fdst_idx != 0xFFFFFFFF, "FDST index should be set for KF8"
         # FDST count at 0xC4
         assert struct.unpack('>I', data[0xC4:0xC8])[0] == 1
-        # Extra data flags at 0xF0 = 3 (bits 0+1: overlap + multibyte trailing)
-        assert struct.unpack('>I', data[0xF0:0xF4])[0] == 3
+        # Extra data flags at 0xF0 = 0 (no trailing bytes)
+        assert struct.unpack('>I', data[0xF0:0xF4])[0] == 0
         # Chunk index at 0xF8 (should be valid)
         chunk_idx = struct.unpack('>I', data[0xF8:0xFC])[0]
         assert chunk_idx != 0xFFFFFFFF, "Chunk index should be set for KF8"
@@ -438,7 +435,7 @@ def test_utf8_boundary_splitting():
 
 
 def test_kf8_skeleton_content():
-    """KF8 text stream contains skeleton HTML with aid attributes."""
+    """KF8 text stream contains XHTML skeleton with aid attributes."""
     from convertext.converters.ebooks.azw3 import ToAzw3Converter
     converter = ToAzw3Converter()
 
@@ -449,10 +446,79 @@ def test_kf8_skeleton_content():
         azw3_file = tmppath / "test.azw3"
         converter.convert(txt_file, azw3_file, {})
         text = _independent_parse_kf8(azw3_file)
-        # KF8 text stream should contain skeleton HTML with aid attributes
         assert 'aid="0000"' in text
         assert '<body' in text
         assert 'Some content here' in text
+        assert '<?xml version="1.0"' in text
+        assert 'xmlns="http://www.w3.org/1999/xhtml"' in text
+
+
+def test_kf8_xhtml_skeleton():
+    """First text record decompresses to valid XHTML with XML declaration and xmlns."""
+    from convertext.converters.ebooks.azw3 import ToAzw3Converter, _palmdoc_compress
+    import struct as _struct
+
+    converter = ToAzw3Converter()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmppath = Path(tmpdir)
+        txt_file = tmppath / "test.txt"
+        txt_file.write_text("My Book\n\nContent paragraph.")
+        azw3_file = tmppath / "test.azw3"
+        converter.convert(txt_file, azw3_file, {})
+
+        with open(azw3_file, 'rb') as f:
+            data = f.read()
+
+        num_records = _struct.unpack('>H', data[76:78])[0]
+        rec_offsets = [_struct.unpack('>I', data[78 + i*8: 82 + i*8])[0] for i in range(num_records)]
+
+        # Read first text record (record index 1)
+        rec_start = rec_offsets[1]
+        rec_end = rec_offsets[2]
+        rec_data = data[rec_start:rec_end]
+
+        # Decompress PalmDOC
+        from convertext.converters.ebooks.azw3 import Azw3Converter
+        decompressed = Azw3Converter()._palmdoc_decompress(rec_data).decode('utf-8')
+
+        assert decompressed.startswith('<?xml version="1.0"')
+        assert 'xmlns="http://www.w3.org/1999/xhtml"' in decompressed
+
+
+def test_kf8_xhtml_renders():
+    """Decompressed skeleton contains body element with correct aid attribute."""
+    from convertext.converters.ebooks.azw3 import ToAzw3Converter, Azw3Converter
+    import struct as _struct
+
+    converter = ToAzw3Converter()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmppath = Path(tmpdir)
+        txt_file = tmppath / "test.txt"
+        txt_file.write_text("Title\n\nBody text.")
+        azw3_file = tmppath / "test.azw3"
+        converter.convert(txt_file, azw3_file, {})
+
+        with open(azw3_file, 'rb') as f:
+            data = f.read()
+
+        num_records = _struct.unpack('>H', data[76:78])[0]
+        rec_offsets = [_struct.unpack('>I', data[78 + i*8: 82 + i*8])[0] for i in range(num_records)]
+
+        rec_data = data[rec_offsets[1]:rec_offsets[2]]
+        decompressed = Azw3Converter()._palmdoc_decompress(rec_data).decode('utf-8')
+
+        # Extract just the skeleton (up to and including </html>)
+        html_end = decompressed.index('</html>') + len('</html>')
+        skeleton_xml = decompressed[:html_end]
+
+        from xml.etree import ElementTree as ET
+        root = ET.fromstring(skeleton_xml)
+        ns = {'x': 'http://www.w3.org/1999/xhtml'}
+        body = root.find('x:body', ns)
+        assert body is not None, "body element not found in XHTML skeleton"
+        assert body.get('aid') == '0000', f"Expected aid='0000', got {body.get('aid')}"
 
 
 def test_kf8_vwi_encoding():

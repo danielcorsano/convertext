@@ -103,13 +103,21 @@ class Azw3Converter(BaseConverter):
                 f.seek(records[i])
                 record_data = f.read(records[i + 1] - records[i])
 
-                if extra_data_flags & 1 and len(record_data) > 0:
-                    trail_size = (record_data[-1] & 0b11) + 1
-                    record_data = record_data[:-trail_size]
-                elif extra_data_flags & 2 and len(record_data) > 0:
-                    # multibyte trailing: last byte encodes count, strip it + that many bytes
-                    n = record_data[-1] & 0b11
-                    record_data = record_data[:-(n + 1)]
+                # Strip trailing bytes per extra_data_flags bits (sequential, high bits first)
+                n = 0
+                for bit in range(15, 0, -1):
+                    if extra_data_flags & (1 << bit):
+                        b = record_data[-1 - n]
+                        sz = b & 0x7f
+                        if not (b & 0x80):
+                            sz = (sz << 7) | (record_data[-2 - n] & 0x7f)
+                            n += 1
+                        n += sz + 1
+                if extra_data_flags & 1:
+                    b = record_data[-1 - n]
+                    n += (b & 3) + 1
+                if n:
+                    record_data = record_data[:-n]
 
                 try:
                     if compression == 2:
@@ -361,9 +369,7 @@ class ToAzw3Converter(BaseConverter):
 
         compressed_records = []
         for rec in raw_records:
-            # Trailing bytes for extra_data_flags=3:
-            # \x00 = multibyte indicator (0 split chars), \x81 = overlap marker (strip 2 bytes total)
-            compressed_records.append(_palmdoc_compress(rec) + b'\x00\x81')
+            compressed_records.append(_palmdoc_compress(rec))
 
         chunk_indx = _build_chunk_indx(chunk_infos, text_length)
         skel_indx = _build_skel_indx(chunk_infos)
@@ -502,8 +508,15 @@ def _build_kf8_content(doc: Document, title: str):
     for i, blocks in enumerate(chunks_content):
         aid = _to_base32(i)
         skeleton = (
-            f'<html><head><title>{_esc(title)}</title></head>'
-            f'<body aid="{aid}">\n</body></html>'
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<html xmlns="http://www.w3.org/1999/xhtml">'
+            '<head>'
+            '<meta content="text/html; charset=utf-8" http-equiv="Content-Type"/>'
+            f'<title>{_esc(title)}</title>'
+            '</head>'
+            f'<body aid="{aid}">'
+            '</body>'
+            '</html>'
         ).encode('utf-8')
 
         body_parts = []
@@ -618,9 +631,7 @@ def _build_skel_indx(chunk_infos: list) -> list:
     for i, ci in enumerate(chunk_infos):
         label = f'SKEL{i:010d}'
         label_enc = struct.pack('B', len(label)) + label.encode('ascii')
-        # Control byte 0x0A: chunk_count=2 entries (mask 3, shift 0: 2<<0=2),
-        # geometry=2 entries (mask 12, shift 2: 2<<2=8). 2|8=0x0A
-        cb = b'\x0A'
+        cb = b'\x0F'
         vals = (
             _encint(1) + _encint(1) +                           # chunk_count doubled
             _encint(ci.pre_start) + _encint(ci.pre_length) +    # geometry doubled
@@ -652,7 +663,7 @@ def _build_chunk_indx(chunk_infos: list, text_length: int) -> list:
             _encint(cncx_offsets[i]) +     # cncx_offset
             _encint(i) +                    # file_number (skeleton index)
             _encint(i) +                    # sequence_number
-            _encint(0) +                    # geometry start (within chunk)
+            _encint(ci.content_start) +     # geometry start = absolute offset in rawML
             _encint(ci.content_length)      # geometry length
         )
         entries.append(label_enc + cb + vals)
@@ -752,7 +763,7 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xE0: SRCS (none)
     h += struct.pack('>I', 0)                           # 0xE4: SRCS count
     h += struct.pack('>II', 0xFFFFFFFF, 0xFFFFFFFF)     # 0xE8-0xEF: unknown
-    h += struct.pack('>I', 3)                           # 0xF0: extra data flags (bits 0+1)
+    h += struct.pack('>I', 0)                           # 0xF0: extra data flags (none)
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xF4: NCX index (none)
     h += struct.pack('>I', chunk_idx)                   # 0xF8: chunk index
     h += struct.pack('>I', skel_idx)                    # 0xFC: skeleton index
