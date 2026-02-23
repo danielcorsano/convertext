@@ -360,6 +360,7 @@ class ToAzw3Converter(BaseConverter):
         """Create KF8/AZW3 file with proper skeleton/chunk INDX records."""
         title = doc.metadata.get('title', default_title)
         author = doc.metadata.get('author', 'Unknown')
+        language = doc.metadata.get('language', 'en').split('-')[0]  # normalize e.g. en-US → en
 
         text_data, chunk_infos = _build_kf8_content(doc, title)
         text_length = len(text_data)
@@ -369,14 +370,14 @@ class ToAzw3Converter(BaseConverter):
 
         compressed_records = []
         for rec in raw_records:
-            compressed_records.append(_palmdoc_compress(rec))
+            compressed_records.append(_palmdoc_compress(rec) + b'\x00')
 
         chunk_indx = _build_chunk_indx(chunk_infos, text_length)
         skel_indx = _build_skel_indx(chunk_infos)
 
         fdst = _build_fdst(text_length)
         fcis = _build_fcis_kf8(text_length)
-        exth = _build_exth(title, author)
+        exth = _build_exth(title, author, language)
 
         # Record layout: rec0 + text(N) + chunk_indx(3) + skel_indx(2) + fdst + flis + fcis + eof
         chunk_idx = num_text_records + 1
@@ -680,11 +681,12 @@ def _build_fdst(text_length: int) -> bytes:
 
 
 def _build_fcis_kf8(text_length: int) -> bytes:
-    """Build FCIS record for KF8 (44 bytes, offset 12 = 0x02)."""
+    """Build FCIS record for KF8 (52 bytes, matching Calibre's output exactly)."""
     return (b'FCIS\x00\x00\x00\x14\x00\x00\x00\x10'
             b'\x00\x00\x00\x02\x00\x00\x00\x00'
             + struct.pack('>I', text_length)
             + b'\x00\x00\x00\x00\x00\x00\x00\x28'
+            b'\x00\x00\x00\x00\x00\x00\x00\x28'
             b'\x00\x00\x00\x08\x00\x01\x00\x01\x00\x00\x00\x00')
 
 
@@ -763,7 +765,7 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xE0: SRCS (none)
     h += struct.pack('>I', 0)                           # 0xE4: SRCS count
     h += struct.pack('>II', 0xFFFFFFFF, 0xFFFFFFFF)     # 0xE8-0xEF: unknown
-    h += struct.pack('>I', 0)                           # 0xF0: extra data flags (none)
+    h += struct.pack('>I', 1)                           # 0xF0: extra data flags (bit 0 = trailing overlap byte)
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xF4: NCX index (none)
     h += struct.pack('>I', chunk_idx)                   # 0xF8: chunk index
     h += struct.pack('>I', skel_idx)                    # 0xFC: skeleton index
@@ -788,31 +790,29 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     return bytes(h)
 
 
-def _build_exth(title: str, author: str) -> bytes:
+def _build_exth(title: str, author: str, language: str = 'en') -> bytes:
     """Build EXTH header with KF8-compatible metadata."""
-    records = []
+    def rec(code, payload):
+        return struct.pack('>II', code, 8 + len(payload)) + payload
 
-    ab = author.encode('utf-8')
-    records.append(struct.pack('>II', 100, 8 + len(ab)) + ab)
-
-    records.append(struct.pack('>III', 204, 12, 201))   # creator software
-    records.append(struct.pack('>III', 205, 12, 2))     # creator major
-    records.append(struct.pack('>III', 206, 12, 9))     # creator minor
-    records.append(struct.pack('>III', 207, 12, 0))     # creator build
-
-    records.append(struct.pack('>II', 501, 12) + b'EBOK')  # CDE type
-
-    tb = title.encode('utf-8')
-    records.append(struct.pack('>II', 503, 8 + len(tb)) + tb)
-
-    records.append(struct.pack('>III', 125, 12, 0))   # num_of_resources
-    records.append(struct.pack('>III', 131, 12, 0))   # kf8_unknown_count
+    records = [
+        rec(100, author.encode('utf-8')),
+        rec(106, b'2000-01-01'),                       # pubdate (required by some Kindle firmware)
+        rec(204, struct.pack('>I', 202)),               # creator software = kindlegen Mac
+        rec(205, struct.pack('>I', 2)),                 # creator major
+        rec(206, struct.pack('>I', 9)),                 # creator minor
+        rec(207, struct.pack('>I', 0)),                 # creator build
+        rec(501, b'EBOK'),                              # CDE type
+        rec(503, title.encode('utf-8')),
+        rec(524, language.encode('utf-8')),             # language
+        rec(528, b'true'),                              # override_kindle_fonts
+        rec(125, struct.pack('>I', 0)),                 # num_of_resources
+        rec(131, struct.pack('>I', 0)),                 # kf8_unknown_count
+    ]
 
     data = b''.join(records)
     raw_len = 12 + len(data)
     padding = (4 - (raw_len % 4)) % 4
-    if padding == 0:
-        padding = 4
 
     result = b'EXTH'
     result += struct.pack('>I', raw_len + padding)
