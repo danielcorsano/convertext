@@ -23,9 +23,8 @@ def load_converters():
     register_converter(ToEpubConverter())
     register_converter(PdfToEpubConverter())
 
-    from convertext.converters.ebooks.azw3 import Azw3Converter, ToAzw3Converter
+    from convertext.converters.ebooks.azw3 import Azw3Converter
     register_converter(Azw3Converter())
-    register_converter(ToAzw3Converter())
 
     # Optional converters (gracefully skip if dependencies missing)
     try:

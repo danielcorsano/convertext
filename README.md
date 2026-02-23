@@ -11,10 +11,10 @@ Convert between all major text, document and ebook extensions with a single term
 ## Supported Formats
 
 **Bidirectional (Read & Write):**
-PDF, DOCX, RTF, TXT, Markdown, HTML, EPUB, AZW3, FB2
+PDF, DOCX, RTF, TXT, Markdown, HTML, EPUB, FB2
 
 **Read Only:**
-DOC, ODT, AZW
+DOC, ODT, AZW3, AZW, MOBI
 
 ## Features
 
@@ -43,9 +43,6 @@ convertext document.md --format html,epub
 # Batch convert all Word docs to Markdown
 convertext *.docx --format md
 
-# Convert PDF to AZW3 (Kindle)
-convertext book.pdf --format azw3
-
 # See all supported formats
 convertext --list-formats
 ```
@@ -61,7 +58,7 @@ convertext.convert('book.pdf', 'epub')
 convertext.convert('document.md', 'html', output='./out/', overwrite=True)
 
 # Keep intermediate files (for debugging multi-hop)
-convertext.convert('book.pdf', 'azw3', keep_intermediate=True)
+convertext.convert('book.pdf', 'epub', keep_intermediate=True)
 ```
 
 ## Usage Examples
@@ -134,11 +131,8 @@ convertext book.md --format epub --config my-config.yaml
 # Create EPUB from Markdown (with chapters)
 convertext book.md --format epub
 
-# Convert EPUB to Kindle format
-convertext ebook.epub --format azw3
-
 # Convert any document to multiple ebook formats
-convertext document.pdf --format epub,azw3,fb2 --verbose
+convertext document.pdf --format epub,fb2 --verbose
 
 # Convert EPUB to text for reading
 convertext ebook.epub --format txt
@@ -155,10 +149,6 @@ ConverText automatically finds conversion paths for unsupported direct conversio
 # PDF → EPUB: Automatically converts via PDF → TXT → EPUB (2 hops)
 convertext book.pdf --format epub --verbose
 # Output: ✓ book.pdf → book.epub (PDF → TXT → EPUB, 2 hops)
-
-# PDF → AZW3: Automatically converts via PDF → TXT → AZW3 (2 hops)
-convertext book.pdf --format azw3 --verbose
-# Output: ✓ book.pdf → book.azw3 (PDF → TXT → AZW3, 2 hops)
 
 # Keep intermediate files for debugging
 convertext book.pdf --format epub --keep-intermediate
