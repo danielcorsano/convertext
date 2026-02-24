@@ -14,7 +14,7 @@ Convert between all major text, document and ebook extensions with a single term
 PDF, DOCX, RTF, TXT, Markdown, HTML, EPUB, FB2
 
 **Read Only:**
-DOC, ODT, AZW3, AZW, MOBI
+DOC, ODT
 
 ## Features
 
@@ -333,10 +333,6 @@ ConverText implements lightweight native Python parsers for ebook formats:
 - **EPUB**: Native Python reader/writer using zipfile + lxml
   - Reads: Parses OPF metadata and spine order
   - Writes: Generates EPUB 3 structure (container.xml, OPF, NCX, XHTML)
-
-- **AZW3/KF8**: Native Python reader/writer using PDB container with MOBI v8 headers
-  - Reads: PDB parser with PalmDOC decompression and EXTH metadata extraction
-  - Writes: PDB structure with KF8 headers, FDST, and PalmDOC compression
 
 - **ODT**: Native Python reader using zipfile + lxml
 
