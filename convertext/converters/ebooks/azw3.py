@@ -634,9 +634,8 @@ def _build_skel_indx(chunk_infos: list) -> list:
         label_enc = struct.pack('B', len(label)) + label.encode('ascii')
         cb = b'\x0F'
         vals = (
-            _encint(1) + _encint(1) +                           # chunk_count doubled
-            _encint(ci.pre_start) + _encint(ci.pre_length) +    # geometry doubled
-            _encint(ci.pre_start) + _encint(ci.pre_length)
+            _encint(1) +                                        # tag1: chunk_count = 1
+            _encint(ci.pre_start) + _encint(ci.pre_length)      # tag6: geometry (start, length)
         )
         entries.append(label_enc + cb + vals)
 
