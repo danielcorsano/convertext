@@ -302,6 +302,8 @@ def _independent_parse_kf8(path):
                                 start += 1
         return bytes(result)
 
+    extra_data_flags = struct.unpack('>I', data[r0+0xF0:r0+0xF4])[0]
+
     text_parts = []
     for i in range(1, num_text_records + 1):
         if i >= len(record_offsets):
@@ -309,6 +311,10 @@ def _independent_parse_kf8(path):
         rec_start = record_offsets[i]
         rec_end = record_offsets[i+1] if i+1 < len(record_offsets) else len(data)
         rec_data = data[rec_start:rec_end]
+        # Strip overlap indicator byte when extra_data_flags bit 0 is set
+        if extra_data_flags & 1:
+            overlap = rec_data[-1] & 3
+            rec_data = rec_data[:-(1 + overlap)]
         if compression == 2:
             text_parts.append(palmdoc_decompress(rec_data))
         else:
@@ -371,8 +377,8 @@ def test_azw3_kf8_header_offsets():
         assert fdst_idx != 0xFFFFFFFF, "FDST index should be set for KF8"
         # FDST count at 0xC4
         assert struct.unpack('>I', data[0xC4:0xC8])[0] == 1
-        # Extra data flags at 0xF0 = 0 (no trailing bytes)
-        assert struct.unpack('>I', data[0xF0:0xF4])[0] == 0
+        # Extra data flags at 0xF0 = 1 (overlap byte per text record)
+        assert struct.unpack('>I', data[0xF0:0xF4])[0] == 1
         # Chunk index at 0xF8 (should be valid)
         chunk_idx = struct.unpack('>I', data[0xF8:0xFC])[0]
         assert chunk_idx != 0xFFFFFFFF, "Chunk index should be set for KF8"
@@ -546,7 +552,7 @@ def test_kf8_indx_structure():
     """INDX records have correct internal structure."""
     from convertext.converters.ebooks.azw3 import _build_skel_indx, _build_chunk_indx, ChunkInfo
 
-    chunks = [ChunkInfo(0, 100, 100, 50), ChunkInfo(150, 100, 250, 60)]
+    chunks = [ChunkInfo(0, 100, 86, 100, 50), ChunkInfo(150, 100, 86, 250, 60)]
 
     skel_recs = _build_skel_indx(chunks)
     assert len(skel_recs) == 2  # header + data

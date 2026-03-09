@@ -15,7 +15,7 @@ _FLIS = (b'FLIS\x00\x00\x00\x08\x00\x41\x00\x00\x00\x00\x00\x00'
 
 _EOF = b'\xe9\x8e\x0d\x0a'
 
-ChunkInfo = namedtuple('ChunkInfo', 'pre_start pre_length content_start content_length')
+ChunkInfo = namedtuple('ChunkInfo', 'pre_start pre_length insert_offset content_start content_length')
 
 
 class Azw3Converter(BaseConverter):
@@ -370,6 +370,7 @@ class ToAzw3Converter(BaseConverter):
 
         compressed_records = []
         for rec in raw_records:
+            # Append overlap indicator byte (0 = no overlap); required when extra_data_flags=1
             compressed_records.append(_palmdoc_compress(rec) + b'\x00')
 
         chunk_indx = _build_chunk_indx(chunk_infos, text_length)
@@ -379,14 +380,15 @@ class ToAzw3Converter(BaseConverter):
         fcis = _build_fcis_kf8(text_length)
         exth = _build_exth(title, author, language)
 
-        # Record layout: rec0 + text(N) + chunk_indx(3) + skel_indx(2) + fdst + flis + fcis + eof
-        chunk_idx = num_text_records + 1
-        skel_idx = num_text_records + 4
-        fdst_idx = num_text_records + 6
-        flis_idx = num_text_records + 7
-        fcis_idx = num_text_records + 8
-        first_non_text = num_text_records + 1
-        total_records = num_text_records + 10
+        # Record layout: rec0 + text(N) + null + chunk_indx(3) + skel_indx(2) + fdst + flis + fcis + eof
+        null_record = b'\x00\x00\x00'
+        chunk_idx = num_text_records + 2
+        skel_idx = num_text_records + 5
+        fdst_idx = num_text_records + 7
+        flis_idx = num_text_records + 8
+        fcis_idx = num_text_records + 9
+        first_non_text = num_text_records + 2
+        total_records = num_text_records + 11
 
         rec0 = _build_record0_kf8(
             text_length, num_text_records, exth, title,
@@ -396,6 +398,7 @@ class ToAzw3Converter(BaseConverter):
         # Collect all records in order
         all_records = [rec0]
         all_records.extend(compressed_records)
+        all_records.append(null_record)
         for r in chunk_indx:
             all_records.append(r)
         for r in skel_indx:
@@ -531,10 +534,13 @@ def _build_kf8_content(doc: Document, title: str):
 
         pre_start = offset
         pre_length = len(skeleton)
+        # insert_offset: position within skeleton where content is injected
+        # Kindle reconstructs: skeleton[0:insert_offset] + content + skeleton[insert_offset:]
+        insert_offset = pre_length - len(b'</body></html>')
         content_start = offset + pre_length
         content_length = len(body)
 
-        chunk_infos.append(ChunkInfo(pre_start, pre_length, content_start, content_length))
+        chunk_infos.append(ChunkInfo(pre_start, pre_length, insert_offset, content_start, content_length))
         text_parts.append(skeleton)
         text_parts.append(body)
         offset += pre_length + content_length
@@ -632,10 +638,17 @@ def _build_skel_indx(chunk_infos: list) -> list:
     for i, ci in enumerate(chunk_infos):
         label = f'SKEL{i:010d}'
         label_enc = struct.pack('B', len(label)) + label.encode('ascii')
-        cb = b'\x0F'
+        # ctrl=0x0a: bit1 set (tag1 primary) + bit3 set (tag6 primary)
+        # Each tag always encodes count_bits_in_mask * vpe values:
+        # tag1(mask=0x3,vpe=1): 2 values; tag6(mask=0xc,vpe=2): 4 values = 6 total
+        cb = b'\x0a'
         vals = (
-            _encint(1) +                                        # tag1: chunk_count = 1
-            _encint(ci.pre_start) + _encint(ci.pre_length)      # tag6: geometry (start, length)
+            _encint(1) +                 # tag1 secondary (bit0): chunk_count
+            _encint(1) +                 # tag1 primary (bit1): chunk_count
+            _encint(ci.pre_start) +      # tag6 secondary (bit2): pre_start
+            _encint(ci.pre_length) +     # tag6 secondary (bit2): pre_length
+            _encint(ci.pre_start) +      # tag6 primary (bit3): pre_start
+            _encint(ci.pre_length)       # tag6 primary (bit3): pre_length
         )
         entries.append(label_enc + cb + vals)
 
@@ -663,8 +676,8 @@ def _build_chunk_indx(chunk_infos: list, text_length: int) -> list:
             _encint(cncx_offsets[i]) +     # cncx_offset
             _encint(i) +                    # file_number (skeleton index)
             _encint(i) +                    # sequence_number
-            _encint(ci.content_start) +     # geometry start = absolute offset in rawML
-            _encint(ci.content_length)      # geometry length
+            _encint(ci.pre_start) +         # pre_start: skeleton start in rawML
+            _encint(ci.insert_offset)       # insert_offset: injection point within skeleton
         )
         entries.append(label_enc + cb + vals)
 
@@ -740,7 +753,7 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     h += struct.pack('>I', first_non_text)              # 0x50: first non-book record
     h += struct.pack('>I', title_offset)                # 0x54: full name offset
     h += struct.pack('>I', len(title_bytes))            # 0x58: full name length
-    h += struct.pack('>I', 1033)                        # 0x5C: locale = en-US
+    h += struct.pack('>I', 9)                           # 0x5C: locale = English
     h += struct.pack('>II', 0, 0)                       # 0x60: input/output language
     h += struct.pack('>I', 8)                           # 0x68: min version = 8
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0x6C: first image (none)
@@ -764,7 +777,7 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xE0: SRCS (none)
     h += struct.pack('>I', 0)                           # 0xE4: SRCS count
     h += struct.pack('>II', 0xFFFFFFFF, 0xFFFFFFFF)     # 0xE8-0xEF: unknown
-    h += struct.pack('>I', 1)                           # 0xF0: extra data flags (bit 0 = trailing overlap byte)
+    h += struct.pack('>I', 1)                           # 0xF0: extra data flags (overlap byte per record)
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xF4: NCX index (none)
     h += struct.pack('>I', chunk_idx)                   # 0xF8: chunk index
     h += struct.pack('>I', skel_idx)                    # 0xFC: skeleton index
@@ -806,7 +819,6 @@ def _build_exth(title: str, author: str, language: str = 'en') -> bytes:
         rec(524, language.encode('utf-8')),             # language
         rec(528, b'true'),                              # override_kindle_fonts
         rec(125, struct.pack('>I', 0)),                 # num_of_resources
-        rec(131, struct.pack('>I', 0)),                 # kf8_unknown_count
     ]
 
     data = b''.join(records)
