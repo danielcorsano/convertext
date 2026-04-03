@@ -1,11 +1,12 @@
 """AZW3/KF8 format converter - native KF8 implementation for Kindle."""
 
+import html as _html
+import random
+import struct
+import time
+from collections import namedtuple
 from pathlib import Path
 from typing import Any, Dict, List
-from collections import namedtuple
-import struct
-import random
-import time
 
 from convertext.converters.base import BaseConverter, Document
 
@@ -427,12 +428,7 @@ class ToAzw3Converter(BaseConverter):
 # --- KF8 helper functions ---
 
 def _esc(text: str) -> str:
-    return (text
-            .replace('&', '&amp;')
-            .replace('<', '&lt;')
-            .replace('>', '&gt;')
-            .replace('"', '&quot;')
-            .replace("'", '&#39;'))
+    return _html.escape(text, quote=True)
 
 
 def _encint(value: int) -> bytes:
@@ -560,7 +556,7 @@ def _build_indx_header(tagx: bytes, last_key: str, entry_count: int,
     header = bytearray(192)
     header[0:4] = b'INDX'
     struct.pack_into('>I', header, 4, 192)
-    struct.pack_into('>I', header, 16, 2)            # type = index header
+    struct.pack_into('>I', header, 8, 2)             # type = index header
     struct.pack_into('>I', header, 24, 1)            # num data records = 1
     struct.pack_into('>I', header, 28, 65001)        # UTF-8
     struct.pack_into('>I', header, 32, 0xFFFFFFFF)
@@ -592,7 +588,7 @@ def _build_indx_data(entries: list) -> bytes:
     header = bytearray(192)
     header[0:4] = b'INDX'
     struct.pack_into('>I', header, 4, 192)
-    struct.pack_into('>I', header, 12, 1)            # header type = data
+    struct.pack_into('>I', header, 8, 0)             # type = data record
     struct.pack_into('>I', header, 24, len(entries))
     header[28:36] = b'\xFF' * 8
 
@@ -835,7 +831,7 @@ def _palmdoc_compress(data: bytes) -> bytes:
         best_dist = 0
 
         if i >= 3:
-            max_dist = min(2047, i)
+            max_dist = min(2047, i, 256)  # 256-byte window: fast with minimal size cost
             for dist in range(1, max_dist + 1):
                 pos = i - dist
                 match_len = 0

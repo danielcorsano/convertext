@@ -237,28 +237,26 @@ def _independent_parse_kf8(path):
     # Validate chunk INDX header record
     chunk_off = record_offsets[chunk_idx]
     assert data[chunk_off:chunk_off+4] == b'INDX', "Chunk INDX missing INDX magic"
-    chunk_hdr_type = struct.unpack('>I', data[chunk_off+12:chunk_off+16])[0]
-    assert chunk_hdr_type == 0, f"Chunk header type should be 0, got {chunk_hdr_type}"
-    chunk_indx_type = struct.unpack('>I', data[chunk_off+16:chunk_off+20])[0]
+    chunk_indx_type = struct.unpack('>I', data[chunk_off+8:chunk_off+12])[0]
     assert chunk_indx_type == 2, f"Chunk INDX type should be 2, got {chunk_indx_type}"
 
     # Validate chunk INDX data record
     chunk_data_off = record_offsets[chunk_idx + 1]
     assert data[chunk_data_off:chunk_data_off+4] == b'INDX', "Chunk data missing INDX magic"
-    chunk_data_type = struct.unpack('>I', data[chunk_data_off+12:chunk_data_off+16])[0]
-    assert chunk_data_type == 1, f"Chunk data type should be 1, got {chunk_data_type}"
+    chunk_data_type = struct.unpack('>I', data[chunk_data_off+8:chunk_data_off+12])[0]
+    assert chunk_data_type == 0, f"Chunk data type should be 0, got {chunk_data_type}"
 
-    # Validate skeleton INDX header record
+    # Validate skeleton INDX header record (type at offset 8)
     skel_off = record_offsets[skel_idx]
     assert data[skel_off:skel_off+4] == b'INDX', "Skeleton INDX missing INDX magic"
-    skel_hdr_type = struct.unpack('>I', data[skel_off+12:skel_off+16])[0]
-    assert skel_hdr_type == 0, f"Skel header type should be 0, got {skel_hdr_type}"
+    skel_hdr_type = struct.unpack('>I', data[skel_off+8:skel_off+12])[0]
+    assert skel_hdr_type == 2, f"Skel header type should be 2, got {skel_hdr_type}"
 
-    # Validate skeleton INDX data record
+    # Validate skeleton INDX data record (type at offset 8)
     skel_data_off = record_offsets[skel_idx + 1]
     assert data[skel_data_off:skel_data_off+4] == b'INDX', "Skel data missing INDX magic"
-    skel_data_type = struct.unpack('>I', data[skel_data_off+12:skel_data_off+16])[0]
-    assert skel_data_type == 1, f"Skel data type should be 1, got {skel_data_type}"
+    skel_data_type = struct.unpack('>I', data[skel_data_off+8:skel_data_off+12])[0]
+    assert skel_data_type == 0, f"Skel data type should be 0, got {skel_data_type}"
 
     # Validate TAGX in chunk INDX header
     tagx_offset = struct.unpack('>I', data[chunk_off+180:chunk_off+184])[0]
@@ -556,15 +554,15 @@ def test_kf8_indx_structure():
     skel_recs = _build_skel_indx(chunks)
     assert len(skel_recs) == 2  # header + data
 
-    # Skeleton header record
+    # Skeleton header record (type at offset 8)
     assert skel_recs[0][:4] == b'INDX'
-    hdr_type = struct.unpack('>I', skel_recs[0][12:16])[0]
-    assert hdr_type == 0  # header record
+    hdr_type = struct.unpack('>I', skel_recs[0][8:12])[0]
+    assert hdr_type == 2  # header record
 
-    # Skeleton data record
+    # Skeleton data record (type at offset 8)
     assert skel_recs[1][:4] == b'INDX'
-    data_type = struct.unpack('>I', skel_recs[1][12:16])[0]
-    assert data_type == 1  # data record
+    data_type = struct.unpack('>I', skel_recs[1][8:12])[0]
+    assert data_type == 0  # data record
 
     chunk_recs = _build_chunk_indx(chunks, 310)
     assert len(chunk_recs) == 3  # header + data + cncx
