@@ -667,8 +667,8 @@ def _build_chunk_indx(chunk_infos: list, text_length: int) -> list:
             _encint(cncx_offsets[i]) +     # cncx_offset
             _encint(i) +                    # file_number (skeleton index)
             _encint(0) +                    # sequence_number (first chunk in skeleton)
-            _encint(ci.pre_start) +         # pre_start: skeleton start in rawML
-            _encint(ci.insert_offset)       # insert_offset: injection point within skeleton
+            _encint(ci.insert_offset) +    # insertion point within skeleton
+            _encint(ci.content_length)     # length of content to insert from rawml
         )
         entries.append(label_enc + cb + vals)
 
