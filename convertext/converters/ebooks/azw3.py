@@ -172,9 +172,8 @@ class Azw3Converter(BaseConverter):
                 if i < len(data):
                     c2 = data[i]
                     i += 1
-                    pair = ((c << 8) | c2) & 0x3FFF
-                    length = (pair & 7) + 3
-                    dist = (pair >> 3) + 1
+                    dist = ((c << 8 | c2) >> 3) & 0x7FF
+                    length = (c2 & 0x07) + 3
                     start = len(result) - dist
                     if start >= 0:
                         for _ in range(length):
@@ -380,15 +379,14 @@ class ToAzw3Converter(BaseConverter):
         fcis = _build_fcis_kf8(text_length)
         exth = _build_exth(title, author, language)
 
-        # Record layout: rec0 + text(N) + null + chunk_indx(3) + skel_indx(2) + fdst + flis + fcis + eof
-        null_record = b'\x00\x00\x00'
-        chunk_idx = num_text_records + 2
-        skel_idx = num_text_records + 5
-        fdst_idx = num_text_records + 7
-        flis_idx = num_text_records + 8
-        fcis_idx = num_text_records + 9
-        first_non_text = num_text_records + 2
-        total_records = num_text_records + 11
+        # Record layout: rec0 + text(N) + chunk_indx(3) + skel_indx(2) + fdst + flis + fcis + eof
+        chunk_idx = num_text_records + 1
+        skel_idx = num_text_records + 4
+        fdst_idx = num_text_records + 6
+        flis_idx = num_text_records + 7
+        fcis_idx = num_text_records + 8
+        first_non_text = num_text_records + 1
+        total_records = num_text_records + 10
 
         rec0 = _build_record0_kf8(
             text_length, num_text_records, exth, title,
@@ -398,7 +396,6 @@ class ToAzw3Converter(BaseConverter):
         # Collect all records in order
         all_records = [rec0]
         all_records.extend(compressed_records)
-        all_records.append(null_record)
         for r in chunk_indx:
             all_records.append(r)
         for r in skel_indx:
@@ -631,24 +628,18 @@ def _build_cncx(strings: list):
 
 def _build_skel_indx(chunk_infos: list) -> list:
     """Build skeleton INDX records: [header_record, data_record]."""
-    skel_tags = [(1, 1, 3, 0), (6, 2, 12, 0), (0, 0, 0, 1)]
+    skel_tags = [(1, 1, 1, 0), (6, 2, 2, 0), (0, 0, 0, 1)]
     tagx = _build_tagx(skel_tags)
 
     entries = []
     for i, ci in enumerate(chunk_infos):
         label = f'SKEL{i:010d}'
         label_enc = struct.pack('B', len(label)) + label.encode('ascii')
-        # ctrl=0x0a: bit1 set (tag1 primary) + bit3 set (tag6 primary)
-        # Each tag always encodes count_bits_in_mask * vpe values:
-        # tag1(mask=0x3,vpe=1): 2 values; tag6(mask=0xc,vpe=2): 4 values = 6 total
-        cb = b'\x0a'
+        cb = b'\x03'
         vals = (
-            _encint(1) +                 # tag1 secondary (bit0): chunk_count
-            _encint(1) +                 # tag1 primary (bit1): chunk_count
-            _encint(ci.pre_start) +      # tag6 secondary (bit2): pre_start
-            _encint(ci.pre_length) +     # tag6 secondary (bit2): pre_length
-            _encint(ci.pre_start) +      # tag6 primary (bit3): pre_start
-            _encint(ci.pre_length)       # tag6 primary (bit3): pre_length
+            _encint(1) +                 # tag1: chunk_count
+            _encint(ci.pre_start) +      # tag6: skeleton rawml offset
+            _encint(ci.pre_length)       # tag6: skeleton rawml length
         )
         entries.append(label_enc + cb + vals)
 
@@ -675,7 +666,7 @@ def _build_chunk_indx(chunk_infos: list, text_length: int) -> list:
         vals = (
             _encint(cncx_offsets[i]) +     # cncx_offset
             _encint(i) +                    # file_number (skeleton index)
-            _encint(i) +                    # sequence_number
+            _encint(0) +                    # sequence_number (first chunk in skeleton)
             _encint(ci.pre_start) +         # pre_start: skeleton start in rawML
             _encint(ci.insert_offset)       # insert_offset: injection point within skeleton
         )
@@ -707,7 +698,7 @@ def _write_palmdb_header(f, title: str, total_records: int, offsets: list):
     name = ''.join(c if 32 <= ord(c) < 128 else '_' for c in title).replace(' ', '_')
     f.write(name[:31].encode('ascii').ljust(32, b'\x00'))
 
-    now = int(time.time())
+    now = int(time.time()) + 2082844800  # PalmOS epoch (1904-01-01)
     f.write(struct.pack('>HH', 0, 0))
     f.write(struct.pack('>III', now, now, 0))
     f.write(struct.pack('>III', 0, 0, 0))
@@ -758,7 +749,7 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     h += struct.pack('>I', 8)                           # 0x68: min version = 8
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0x6C: first image (none)
     h += b'\x00' * 16                                   # 0x70-0x7F: huffman
-    h += struct.pack('>I', 0x50)                        # 0x80: EXTH flags
+    h += struct.pack('>I', 0x40)                        # 0x80: EXTH flags (has EXTH)
     h += b'\x00' * 32                                   # 0x84-0xA3: unknown
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xA4: unknown
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0xA8: DRM offset (none)
@@ -861,7 +852,7 @@ def _palmdoc_compress(data: bytes) -> bytes:
                         break
 
         if best_len >= 3:
-            code = 0x8000 | ((best_dist - 1) << 3) | (best_len - 3)
+            code = 0x8000 | (best_dist << 3) | (best_len - 3)
             result.extend(struct.pack('>H', code))
             i += best_len
         elif 0x09 <= data[i] <= 0x7F:

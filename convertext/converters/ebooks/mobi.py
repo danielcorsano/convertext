@@ -11,6 +11,21 @@ from convertext.converters.base import BaseConverter, Document
 
 _PALM_EPOCH = 2082844800  # seconds from 1904-01-01 to Unix epoch (1970-01-01)
 
+_FLIS = (b'FLIS\x00\x00\x00\x08\x00\x41\x00\x00\x00\x00\x00\x00'
+         b'\xff\xff\xff\xff\x00\x01\x00\x03\x00\x00\x00\x03'
+         b'\x00\x00\x00\x01\xff\xff\xff\xff')
+
+_EOF = b'\xe9\x8e\x0d\x0a'
+
+
+def _build_fcis(text_length: int) -> bytes:
+    """Build FCIS record."""
+    return (b'FCIS\x00\x00\x00\x14\x00\x00\x00\x10'
+            b'\x00\x00\x00\x01\x00\x00\x00\x00'
+            + struct.pack('>I', text_length)
+            + b'\x00\x00\x00\x00\x00\x00\x00\x20'
+            b'\x00\x00\x00\x08\x00\x01\x00\x01\x00\x00\x00\x00')
+
 
 class ToMobiConverter(BaseConverter):
     """Convert documents to MOBI v6 format for Kindle."""
@@ -188,8 +203,9 @@ def _build_exth(title: str, author: str, language: str) -> bytes:
             + b'\x00' * padding)
 
 
-def _build_record0(doc: Document, text_length: int, num_text_records: int) -> bytes:
-    """Build PalmDB record 0: PalmDOC header + MOBI v6 header + EXTH + title."""
+def _build_record0(doc: Document, text_length: int, num_text_records: int,
+                    flis_idx: int, fcis_idx: int) -> bytes:
+    """Build PalmDB record 0: PalmDOC header + MOBI v6 header (232B) + EXTH + title."""
     title = doc.metadata.get('title', 'Unknown')
     author = doc.metadata.get('author', '')
     language = doc.metadata.get('language', 'en')
@@ -209,39 +225,45 @@ def _build_record0(doc: Document, text_length: int, num_text_records: int) -> by
     )
     assert len(palmdoc) == 16
 
-    # MOBI v6 header — 232 bytes
+    # MOBI v6 header — 232 bytes (offsets from MOBI magic 'MOBI')
     FF = 0xFFFFFFFF
     unique_id = random.randint(1, 0xFFFFFFFF)
     first_non_book = num_text_records + 1
 
     mobi = b'MOBI'
-    mobi += struct.pack('>I', 232)                           # header_length
-    mobi += struct.pack('>I', 2)                             # mobi_type = book
-    mobi += struct.pack('>I', 65001)                         # text_encoding = UTF-8
-    mobi += struct.pack('>I', unique_id)
-    mobi += struct.pack('>I', 6)                             # file_version
-    mobi += struct.pack('>IIIIIIIIII',                       # orth/infl/idx_names/idx_keys + 6 extra
-                        FF, FF, FF, FF, FF, FF, FF, FF, FF, FF)
-    mobi += struct.pack('>I', first_non_book)
-    mobi += struct.pack('>I', full_name_offset)
-    mobi += struct.pack('>I', len(title_bytes))
-    mobi += struct.pack('>I', 0x0409)                        # locale = en-US
-    mobi += struct.pack('>II', 0, 0)                         # input/output language
-    mobi += struct.pack('>I', 6)                             # min_version
-    mobi += struct.pack('>I', FF)                            # first_image_index (none)
-    mobi += struct.pack('>IIII', 0, 0, 0, 0)                # huffman fields
-    mobi += struct.pack('>I', 0x50)                          # exth_flags (bit 6 = has EXTH)
-    mobi += b'\x00' * 32                                     # unknown
-    mobi += struct.pack('>IIII', FF, FF, 0, 0)              # drm_offset/count/size/flags
-    mobi += b'\x00' * 8                                      # unknown
-    mobi += struct.pack('>HH', 1, num_text_records)          # first/last content record
-    mobi += struct.pack('>I', 1)                             # unknown
-    mobi += struct.pack('>I', FF)                            # fcis_record
-    mobi += struct.pack('>I', 1)                             # unknown
-    mobi += struct.pack('>I', FF)                            # flis_record
-    mobi += b'\x00' * 8                                      # unknown
-    mobi += struct.pack('>II', FF, 0)                        # srcs_record, srcs_count
-    mobi += b'\x00' * 24                                     # pad to 232 bytes
+    mobi += struct.pack('>I', 232)                           # +4: header_length
+    mobi += struct.pack('>I', 2)                             # +8: mobi_type = book
+    mobi += struct.pack('>I', 65001)                         # +12: text_encoding = UTF-8
+    mobi += struct.pack('>I', unique_id)                     # +16
+    mobi += struct.pack('>I', 6)                             # +20: file_version
+    mobi += b'\xff' * 40                                     # +24-63: unused indices
+    mobi += struct.pack('>I', first_non_book)                # +64
+    mobi += struct.pack('>I', full_name_offset)              # +68: from record 0 start
+    mobi += struct.pack('>I', len(title_bytes))              # +72
+    mobi += struct.pack('>I', 0x0409)                        # +76: locale = en-US
+    mobi += struct.pack('>II', 0, 0)                         # +80: input/output language
+    mobi += struct.pack('>I', 6)                             # +88: min_version
+    mobi += struct.pack('>I', FF)                            # +92: first_image_index (none)
+    mobi += struct.pack('>IIII', 0, 0, 0, 0)                # +96-111: huffman fields
+    mobi += struct.pack('>I', 0x40)                          # +112: exth_flags (has EXTH)
+    mobi += b'\x00' * 32                                     # +116-147: unknown
+    mobi += struct.pack('>I', FF)                            # +148: unknown
+    mobi += struct.pack('>I', FF)                            # +152: drm_offset (none)
+    mobi += struct.pack('>I', 0)                             # +156: drm_count
+    mobi += struct.pack('>I', 0)                             # +160: drm_size
+    mobi += struct.pack('>I', 0)                             # +164: drm_flags
+    mobi += b'\x00' * 8                                      # +168-175: unknown
+    mobi += struct.pack('>HH', 1, num_text_records)          # +176: first/last content record
+    mobi += struct.pack('>I', 0)                             # +180: unknown
+    mobi += struct.pack('>I', fcis_idx)                      # +184: FCIS record
+    mobi += struct.pack('>I', 1)                             # +188: FCIS count
+    mobi += struct.pack('>I', flis_idx)                      # +192: FLIS record
+    mobi += struct.pack('>I', 1)                             # +196: FLIS count
+    mobi += b'\x00' * 8                                      # +200-207: unknown
+    mobi += struct.pack('>II', FF, 0)                        # +208: srcs_record/count (none)
+    mobi += struct.pack('>II', FF, FF)                       # +216-223: unknown
+    mobi += struct.pack('>I', 0)                             # +224: extra_data_flags
+    mobi += struct.pack('>I', FF)                            # +228: INDX record (none)
     assert len(mobi) == 232
 
     record0 = palmdoc + mobi + exth + title_bytes
@@ -249,9 +271,8 @@ def _build_record0(doc: Document, text_length: int, num_text_records: int) -> by
     return record0 + b'\x00' * pad
 
 
-def _write_palmdb(path: Path, record0: bytes, text_records: List[bytes], title: str) -> bool:
-    """Write PalmDB container with record0 and compressed text records."""
-    all_records = [record0] + list(text_records)
+def _write_palmdb(path: Path, all_records: List[bytes], title: str) -> bool:
+    """Write PalmDB container with all records."""
     n = len(all_records)
 
     # palmdb_header(78) + record_list(8*n) + gap(2) + record data
@@ -296,6 +317,12 @@ def _write_mobi(doc: Document, path: Path) -> bool:
     chunks = [html_bytes[i:i + 4096] for i in range(0, max(len(html_bytes), 1), 4096)]
     compressed = [_palmdoc_compress(c) for c in chunks]
 
-    record0 = _build_record0(doc, len(html_bytes), len(compressed))
+    num_text = len(compressed)
+    flis_idx = num_text + 1
+    fcis_idx = num_text + 2
+
+    record0 = _build_record0(doc, len(html_bytes), num_text, flis_idx, fcis_idx)
+    all_records = [record0] + compressed + [_FLIS, _build_fcis(len(html_bytes)), _EOF]
+
     title = doc.metadata.get('title', 'Unknown')
-    return _write_palmdb(path, record0, compressed, title)
+    return _write_palmdb(path, all_records, title)

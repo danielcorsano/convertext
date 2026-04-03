@@ -291,9 +291,8 @@ def _independent_parse_kf8(path):
                 if j < len(compressed):
                     c2 = compressed[j]
                     j += 1
-                    pair = ((c << 8) | c2) & 0x3FFF
-                    length = (pair & 7) + 3
-                    dist = (pair >> 3) + 1
+                    dist = ((c << 8 | c2) >> 3) & 0x7FF
+                    length = (c2 & 0x07) + 3
                     start = len(result) - dist
                     if start >= 0:
                         for _ in range(length):
@@ -368,8 +367,8 @@ def test_azw3_kf8_header_offsets():
         assert struct.unpack('>I', data[0x24:0x28])[0] == 8
         # Min version at 0x68 = 8
         assert struct.unpack('>I', data[0x68:0x6C])[0] == 8
-        # EXTH flags at 0x80 = 0x50
-        assert struct.unpack('>I', data[0x80:0x84])[0] == 0x50
+        # EXTH flags at 0x80 = 0x40 (has EXTH)
+        assert struct.unpack('>I', data[0x80:0x84])[0] == 0x40
         # DRM offset at 0xA8 = no DRM
         assert struct.unpack('>I', data[0xA8:0xAC])[0] == 0xFFFFFFFF
         # FDST at 0xC0 (should be valid record index)
