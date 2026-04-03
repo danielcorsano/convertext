@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Union, Optional
 
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 
 
 def convert(source: Union[str, Path], format: str, output: Optional[str] = None, **kwargs) -> bool:
