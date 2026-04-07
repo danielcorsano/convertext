@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from convertext.converters.base import BaseConverter, Document
+from convertext.converters.ebooks.azw3 import (
+    _prepare_cover_records, _build_ncx_indx,
+)
 
 _PALM_EPOCH = 2082844800  # seconds from 1904-01-01 to Unix epoch (1970-01-01)
 
@@ -117,9 +120,10 @@ def _read_markdown(path: Path, encoding: str) -> Document:
 
 # ── MOBI v6 binary building ───────────────────────────────────────────────────
 
-def _doc_to_html(doc: Document) -> str:
-    """Convert Document to minimal MOBI-compatible HTML."""
+def _doc_to_html(doc: Document) -> tuple:
+    """Convert Document to minimal MOBI-compatible HTML. Returns (html_str, toc_entries)."""
     parts = ['<html><head><meta charset="utf-8"/></head><body>']
+    toc_entries = []
     first_h1 = True
     for block in doc.content:
         btype = block.get('type')
@@ -129,6 +133,8 @@ def _doc_to_html(doc: Document) -> str:
             if level == 1:
                 if not first_h1:
                     parts.append('<mbp:pagebreak/>')
+                offset = len('\n'.join(parts).encode('utf-8')) + 1  # +1 for upcoming \n
+                toc_entries.append({'label': block.get('data', ''), 'offset': offset})
                 first_h1 = False
             parts.append(f'<h{level}>{text}</h{level}>')
         elif btype in ('paragraph', 'text'):
@@ -140,7 +146,13 @@ def _doc_to_html(doc: Document) -> str:
             if text:
                 parts.append(f'<p>{text}</p>')
     parts.append('</body></html>')
-    return '\n'.join(parts)
+    html_str = '\n'.join(parts)
+    html_len = len(html_str.encode('utf-8'))
+    # Fill in section lengths
+    for i, entry in enumerate(toc_entries):
+        next_off = toc_entries[i + 1]['offset'] if i + 1 < len(toc_entries) else html_len
+        entry['length'] = next_off - entry['offset']
+    return html_str, toc_entries
 
 
 def _palmdoc_compress(data: bytes) -> bytes:
@@ -151,7 +163,7 @@ def _palmdoc_compress(data: bytes) -> bytes:
         best_len = 0
         best_dist = 0
         if i >= 3:
-            max_dist = min(2047, i)
+            max_dist = min(2047, i, 256)
             for dist in range(1, max_dist + 1):
                 pos = i - dist
                 match_len = 0
@@ -184,16 +196,31 @@ def _palmdoc_compress(data: bytes) -> bytes:
     return bytes(result)
 
 
-def _build_exth(title: str, author: str, language: str) -> bytes:
-    """Build EXTH header block with title, author, and language records."""
+def _build_exth(title: str, author: str, language: str = 'en',
+                metadata: dict = None, cover_offset: int = -1,
+                thumb_offset: int = -1, num_images: int = 0) -> bytes:
+    """Build EXTH header block with metadata records."""
+    metadata = metadata or {}
+
     def rec(code, payload):
         return struct.pack('>II', code, 8 + len(payload)) + payload
 
     records = [
         rec(100, author.encode('utf-8')),
+        rec(106, metadata.get('date', '2000-01-01').encode('utf-8')),
         rec(503, title.encode('utf-8')),
         rec(524, language.encode('utf-8')),
+        rec(125, struct.pack('>I', num_images)),
     ]
+    for code, key in [(101, 'publisher'), (103, 'description'), (105, 'subject')]:
+        val = metadata.get(key)
+        if val:
+            records.append(rec(code, val.encode('utf-8')[:500]))
+    if cover_offset >= 0:
+        records.append(rec(201, struct.pack('>I', cover_offset)))
+    if thumb_offset >= 0:
+        records.append(rec(202, struct.pack('>I', thumb_offset)))
+
     data = b''.join(records)
     raw_len = 12 + len(data)
     padding = (4 - (raw_len % 4)) % 4
@@ -203,15 +230,28 @@ def _build_exth(title: str, author: str, language: str) -> bytes:
             + b'\x00' * padding)
 
 
+def _mobi_record_layout(num_text, num_images, ncx_count):
+    """Compute all record indices for MOBI v6 file layout."""
+    i = num_text + 1
+    first_image = i if num_images else -1
+    i += num_images
+    ncx_idx = i if ncx_count else -1
+    i += ncx_count
+    flis_idx = i; i += 1
+    fcis_idx = i; i += 1
+    total = i + 1  # +1 for EOF
+    return {
+        'first_image': first_image, 'ncx_idx': ncx_idx,
+        'flis_idx': flis_idx, 'fcis_idx': fcis_idx, 'total': total,
+    }
+
+
 def _build_record0(doc: Document, text_length: int, num_text_records: int,
-                    flis_idx: int, fcis_idx: int) -> bytes:
+                    flis_idx: int, fcis_idx: int, exth: bytes,
+                    first_image: int = -1, ncx_idx: int = -1) -> bytes:
     """Build PalmDB record 0: PalmDOC header + MOBI v6 header (232B) + EXTH + title."""
     title = doc.metadata.get('title', 'Unknown')
-    author = doc.metadata.get('author', '')
-    language = doc.metadata.get('language', 'en')
-
     title_bytes = title.encode('utf-8')
-    exth = _build_exth(title, author, language)
     full_name_offset = 16 + 232 + len(exth)
 
     # PalmDOC header — 16 bytes
@@ -243,7 +283,7 @@ def _build_record0(doc: Document, text_length: int, num_text_records: int,
     mobi += struct.pack('>I', 0x0409)                        # +76: locale = en-US
     mobi += struct.pack('>II', 0, 0)                         # +80: input/output language
     mobi += struct.pack('>I', 6)                             # +88: min_version
-    mobi += struct.pack('>I', FF)                            # +92: first_image_index (none)
+    mobi += struct.pack('>I', first_image if first_image >= 0 else FF)  # +92: first_image_index
     mobi += struct.pack('>IIII', 0, 0, 0, 0)                # +96-111: huffman fields
     mobi += struct.pack('>I', 0x40)                          # +112: exth_flags (has EXTH)
     mobi += b'\x00' * 32                                     # +116-147: unknown
@@ -263,7 +303,7 @@ def _build_record0(doc: Document, text_length: int, num_text_records: int,
     mobi += struct.pack('>II', FF, 0)                        # +208: srcs_record/count (none)
     mobi += struct.pack('>II', FF, FF)                       # +216-223: unknown
     mobi += struct.pack('>I', 0)                             # +224: extra_data_flags
-    mobi += struct.pack('>I', FF)                            # +228: INDX record (none)
+    mobi += struct.pack('>I', ncx_idx if ncx_idx >= 0 else FF)  # +228: INDX record
     assert len(mobi) == 232
 
     record0 = palmdoc + mobi + exth + title_bytes
@@ -311,18 +351,38 @@ def _write_palmdb(path: Path, all_records: List[bytes], title: str) -> bool:
 
 def _write_mobi(doc: Document, path: Path) -> bool:
     """Orchestrate MOBI v6 file creation from a Document."""
-    html_str = _doc_to_html(doc)
+    html_str, toc_entries = _doc_to_html(doc)
     html_bytes = html_str.encode('utf-8')
 
     chunks = [html_bytes[i:i + 4096] for i in range(0, max(len(html_bytes), 1), 4096)]
     compressed = [_palmdoc_compress(c) for c in chunks]
-
     num_text = len(compressed)
-    flis_idx = num_text + 1
-    fcis_idx = num_text + 2
 
-    record0 = _build_record0(doc, len(html_bytes), num_text, flis_idx, fcis_idx)
-    all_records = [record0] + compressed + [_FLIS, _build_fcis(len(html_bytes)), _EOF]
+    image_records, cover_off, thumb_off = _prepare_cover_records(doc)
+    num_images = len(image_records)
+    ncx_indx = _build_ncx_indx(toc_entries)
+
+    layout = _mobi_record_layout(num_text, num_images, len(ncx_indx))
 
     title = doc.metadata.get('title', 'Unknown')
+    author = doc.metadata.get('author', '')
+    language = doc.metadata.get('language', 'en')
+    exth = _build_exth(title, author, language, metadata=doc.metadata,
+                       cover_offset=cover_off, thumb_offset=thumb_off,
+                       num_images=num_images)
+
+    rec0 = _build_record0(doc, len(html_bytes), num_text,
+                           layout['flis_idx'], layout['fcis_idx'], exth,
+                           first_image=layout['first_image'],
+                           ncx_idx=layout['ncx_idx'])
+
+    all_records = [rec0]
+    all_records.extend(compressed)
+    all_records.extend(image_records)
+    all_records.extend(ncx_indx)
+    all_records.extend([_FLIS, _build_fcis(len(html_bytes)), _EOF])
+
+    assert len(all_records) == layout['total'], \
+        f"Record count mismatch: {len(all_records)} != {layout['total']}"
+
     return _write_palmdb(path, all_records, title)

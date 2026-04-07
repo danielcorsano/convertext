@@ -5,6 +5,7 @@ import random
 import struct
 import time
 from collections import namedtuple
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -360,54 +361,57 @@ class ToAzw3Converter(BaseConverter):
         """Create KF8/AZW3 file with proper skeleton/chunk INDX records."""
         title = doc.metadata.get('title', default_title)
         author = doc.metadata.get('author', 'Unknown')
-        language = doc.metadata.get('language', 'en').split('-')[0]  # normalize e.g. en-US → en
+        language = doc.metadata.get('language', 'en').split('-')[0]
 
-        text_data, chunk_infos = _build_kf8_content(doc, title)
+        text_data, chunk_infos, toc_entries = _build_kf8_content(doc, title)
         text_length = len(text_data)
 
         raw_records = _split_text_records(text_data)
         num_text_records = len(raw_records)
+        compressed_records = [_palmdoc_compress(rec) + b'\x00' for rec in raw_records]
 
-        compressed_records = []
-        for rec in raw_records:
-            # Append overlap indicator byte (0 = no overlap); required when extra_data_flags=1
-            compressed_records.append(_palmdoc_compress(rec) + b'\x00')
+        image_records, cover_off, thumb_off = _prepare_cover_records(doc)
+        num_images = len(image_records)
 
         chunk_indx = _build_chunk_indx(chunk_infos, text_length)
         skel_indx = _build_skel_indx(chunk_infos)
+        ncx_indx = _build_ncx_indx(toc_entries)
+        guide_indx = _build_guide_indx(0)
 
         fdst = _build_fdst(text_length)
         fcis = _build_fcis_kf8(text_length)
-        exth = _build_exth(title, author, language)
 
-        # Record layout: rec0 + text(N) + chunk_indx(3) + skel_indx(2) + fdst + flis + fcis + eof
-        chunk_idx = num_text_records + 1
-        skel_idx = num_text_records + 4
-        fdst_idx = num_text_records + 6
-        flis_idx = num_text_records + 7
-        fcis_idx = num_text_records + 8
-        first_non_text = num_text_records + 1
-        total_records = num_text_records + 10
+        # Compute record layout
+        layout = _kf8_record_layout(num_text_records, num_images,
+                                     len(ncx_indx), len(guide_indx))
+
+        exth = _build_exth(title, author, language, metadata=doc.metadata,
+                           cover_offset=cover_off, thumb_offset=thumb_off,
+                           num_images=num_images)
 
         rec0 = _build_record0_kf8(
             text_length, num_text_records, exth, title,
-            first_non_text, chunk_idx, skel_idx, fdst_idx, flis_idx, fcis_idx
+            layout['first_non_text'], layout['chunk_idx'], layout['skel_idx'],
+            layout['fdst_idx'], layout['flis_idx'], layout['fcis_idx'],
+            first_image=layout['first_image'], ncx_idx=layout['ncx_idx'],
+            guide_idx=layout['guide_idx']
         )
 
         # Collect all records in order
         all_records = [rec0]
         all_records.extend(compressed_records)
-        for r in chunk_indx:
-            all_records.append(r)
-        for r in skel_indx:
-            all_records.append(r)
+        all_records.extend(image_records)
+        all_records.extend(chunk_indx)
+        all_records.extend(skel_indx)
+        all_records.extend(ncx_indx)
+        all_records.extend(guide_indx)
         all_records.extend([fdst, _FLIS, fcis, _EOF])
 
-        assert len(all_records) == total_records, \
-            f"Record count mismatch: {len(all_records)} != {total_records}"
+        assert len(all_records) == layout['total'], \
+            f"Record count mismatch: {len(all_records)} != {layout['total']}"
 
         # Calculate record offsets
-        base_offset = 78 + total_records * 8 + 2
+        base_offset = 78 + layout['total'] * 8 + 2
         offsets = []
         pos = base_offset
         for rec in all_records:
@@ -415,7 +419,7 @@ class ToAzw3Converter(BaseConverter):
             pos += len(rec)
 
         with open(path, 'wb') as f:
-            _write_palmdb_header(f, title, total_records, offsets)
+            _write_palmdb_header(f, title, layout['total'], offsets)
             for rec in all_records:
                 f.write(rec)
 
@@ -464,6 +468,33 @@ def _align4(data: bytes) -> bytes:
     return data + b'\x00' * (4 - extra)
 
 
+def _prepare_cover_records(doc: Document) -> tuple:
+    """Prepare cover and thumbnail JPEG records from doc.images['cover'].
+    Returns (image_records, cover_offset, thumb_offset). Empty if no cover."""
+    cover_info = doc.images.get('cover')
+    if not cover_info:
+        return ([], -1, -1)
+    try:
+        from PIL import Image
+        img = Image.open(BytesIO(cover_info['data']))
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        img.thumbnail((1600, 2400), Image.LANCZOS)
+        buf = BytesIO()
+        img.save(buf, 'JPEG', quality=80)
+        cover_jpeg = buf.getvalue()
+
+        thumb = img.copy()
+        thumb.thumbnail((330, 470), Image.LANCZOS)
+        buf = BytesIO()
+        thumb.save(buf, 'JPEG', quality=60)
+        thumb_jpeg = buf.getvalue()
+
+        return ([cover_jpeg, thumb_jpeg], 0, 1)
+    except Exception:
+        return ([], -1, -1)
+
+
 def _split_text_records(text_data: bytes) -> list:
     """Split text into 4096-byte records at UTF-8 character boundaries."""
     records = []
@@ -482,15 +513,17 @@ def _build_kf8_content(doc: Document, title: str):
     """Build KF8 text stream with skeleton/chunk structure.
 
     Each h1-delimited section becomes a separate chunk with its own skeleton.
-    Returns (text_bytes, list_of_ChunkInfo).
+    Returns (text_bytes, list_of_ChunkInfo, toc_entries).
     """
     chunks_content = []
+    chapter_titles = []
     current = []
     for block in doc.content:
         if block['type'] == 'heading' and block['level'] == 1:
             if current:
                 chunks_content.append(current)
             current = [block]
+            chapter_titles.append(block['data'])
         else:
             current.append(block)
     if current:
@@ -527,8 +560,6 @@ def _build_kf8_content(doc: Document, title: str):
 
         pre_start = offset
         pre_length = len(skeleton)
-        # insert_offset: position within skeleton where content is injected
-        # Kindle reconstructs: skeleton[0:insert_offset] + content + skeleton[insert_offset:]
         insert_offset = pre_length - len(b'</body></html>')
         content_start = offset + pre_length
         content_length = len(body)
@@ -538,7 +569,14 @@ def _build_kf8_content(doc: Document, title: str):
         text_parts.append(body)
         offset += pre_length + content_length
 
-    return b''.join(text_parts), chunk_infos
+    # Build TOC entries from chapter titles and chunk positions
+    toc_entries = []
+    for i, ci in enumerate(chunk_infos):
+        if i < len(chapter_titles):
+            section_len = ci.pre_length + ci.content_length
+            toc_entries.append({'label': chapter_titles[i], 'offset': ci.pre_start, 'length': section_len})
+
+    return b''.join(text_parts), chunk_infos, toc_entries
 
 
 def _build_tagx(tags: list, control_byte_count: int = 1) -> bytes:
@@ -689,6 +727,81 @@ def _build_fcis_kf8(text_length: int) -> bytes:
             b'\x00\x00\x00\x08\x00\x01\x00\x01\x00\x00\x00\x00')
 
 
+def _kf8_record_layout(num_text, num_images, ncx_count, guide_count):
+    """Compute all record indices for KF8 file layout."""
+    i = num_text + 1
+    first_image = i if num_images else -1
+    i += num_images
+    chunk_idx = i; i += 3        # header + data + cncx
+    skel_idx = i; i += 2         # header + data
+    ncx_idx = i if ncx_count else -1
+    i += ncx_count
+    guide_idx = i if guide_count else -1
+    i += guide_count
+    fdst_idx = i; i += 1
+    flis_idx = i; i += 1
+    fcis_idx = i; i += 1
+    total = i + 1                # +1 for EOF
+    return {
+        'first_non_text': num_text + 1, 'first_image': first_image,
+        'chunk_idx': chunk_idx, 'skel_idx': skel_idx,
+        'ncx_idx': ncx_idx, 'guide_idx': guide_idx,
+        'fdst_idx': fdst_idx, 'flis_idx': flis_idx, 'fcis_idx': fcis_idx,
+        'total': total,
+    }
+
+
+def _build_ncx_indx(toc_entries: list) -> list:
+    """Build NCX INDX records for Kindle chapter navigation.
+    Returns [header_rec, data_rec, cncx_rec] or [] if no entries."""
+    if not toc_entries:
+        return []
+
+    ncx_tags = [
+        (1, 1, 1, 0),   # byte offset in rawML
+        (2, 1, 2, 0),   # section length
+        (3, 1, 4, 0),   # CNCX label offset
+        (4, 1, 8, 0),   # depth (always 0 for flat TOC)
+        (0, 0, 0, 1),
+    ]
+    tagx = _build_tagx(ncx_tags)
+
+    labels = [e['label'] for e in toc_entries]
+    cncx_rec, cncx_offsets = _build_cncx(labels)
+
+    entries = []
+    for i, e in enumerate(toc_entries):
+        key = f'{i:03d}'
+        key_enc = struct.pack('B', len(key)) + key.encode('ascii')
+        cb = b'\x0F'  # all 4 tags present
+        vals = (
+            _encint(e['offset']) +
+            _encint(e['length']) +
+            _encint(cncx_offsets[i]) +
+            _encint(0)  # depth = 0
+        )
+        entries.append(key_enc + cb + vals)
+
+    last_key = f'{len(toc_entries)-1:03d}'
+    header_rec = _build_indx_header(tagx, last_key, len(entries), len(entries), num_cncx=1)
+    data_rec = _build_indx_data(entries)
+    return [header_rec, data_rec, cncx_rec]
+
+
+def _build_guide_indx(text_start_offset: int) -> list:
+    """Build guide INDX with 'text' entry pointing to start of content."""
+    guide_tags = [(1, 1, 1, 0), (0, 0, 0, 1)]
+    tagx = _build_tagx(guide_tags)
+
+    key = 'text'
+    key_enc = struct.pack('B', len(key)) + key.encode('ascii')
+    entry = key_enc + b'\x01' + _encint(text_start_offset)
+
+    header_rec = _build_indx_header(tagx, key, 1, 1, num_cncx=0)
+    data_rec = _build_indx_data([entry])
+    return [header_rec, data_rec]
+
+
 def _write_palmdb_header(f, title: str, total_records: int, offsets: list):
     """Write 78-byte PalmDB header + record info list + 2-byte gap."""
     name = ''.join(c if 32 <= ord(c) < 128 else '_' for c in title).replace(' ', '_')
@@ -712,7 +825,8 @@ def _write_palmdb_header(f, title: str, total_records: int, offsets: list):
 def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
                          title: str, first_non_text: int, chunk_idx: int,
                          skel_idx: int, fdst_idx: int, flis_idx: int,
-                         fcis_idx: int) -> bytes:
+                         fcis_idx: int, first_image: int = -1,
+                         ncx_idx: int = -1, guide_idx: int = -1) -> bytes:
     """Build record 0: PalmDOC (16B) + KF8 MOBI header (264B) + EXTH + title."""
     title_bytes = title.encode('utf-8')
     mobi_len = 264
@@ -743,7 +857,7 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     h += struct.pack('>I', 9)                           # 0x5C: locale = English
     h += struct.pack('>II', 0, 0)                       # 0x60: input/output language
     h += struct.pack('>I', 8)                           # 0x68: min version = 8
-    h += struct.pack('>I', 0xFFFFFFFF)                  # 0x6C: first image (none)
+    h += struct.pack('>I', first_image if first_image >= 0 else 0xFFFFFFFF)  # 0x6C: first image
     h += b'\x00' * 16                                   # 0x70-0x7F: huffman
     h += struct.pack('>I', 0x40)                        # 0x80: EXTH flags (has EXTH)
     h += b'\x00' * 32                                   # 0x84-0xA3: unknown
@@ -765,11 +879,11 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     h += struct.pack('>I', 0)                           # 0xE4: SRCS count
     h += struct.pack('>II', 0xFFFFFFFF, 0xFFFFFFFF)     # 0xE8-0xEF: unknown
     h += struct.pack('>I', 1)                           # 0xF0: extra data flags (overlap byte per record)
-    h += struct.pack('>I', 0xFFFFFFFF)                  # 0xF4: NCX index (none)
+    h += struct.pack('>I', ncx_idx if ncx_idx >= 0 else 0xFFFFFFFF)  # 0xF4: NCX index
     h += struct.pack('>I', chunk_idx)                   # 0xF8: chunk index
     h += struct.pack('>I', skel_idx)                    # 0xFC: skeleton index
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0x100: DATP (none)
-    h += struct.pack('>I', 0xFFFFFFFF)                  # 0x104: guide (none)
+    h += struct.pack('>I', guide_idx if guide_idx >= 0 else 0xFFFFFFFF)  # 0x104: guide
     # 16 bytes of trailing unknowns to reach 264-byte MOBI header
     h += struct.pack('>I', 0xFFFFFFFF)                  # 0x108: unknown5
     h += struct.pack('>I', 0)                           # 0x10C: unknown6
@@ -789,24 +903,36 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
     return bytes(h)
 
 
-def _build_exth(title: str, author: str, language: str = 'en') -> bytes:
+def _build_exth(title: str, author: str, language: str = 'en',
+                metadata: dict = None, cover_offset: int = -1,
+                thumb_offset: int = -1, num_images: int = 0) -> bytes:
     """Build EXTH header with KF8-compatible metadata."""
+    metadata = metadata or {}
+
     def rec(code, payload):
         return struct.pack('>II', code, 8 + len(payload)) + payload
 
     records = [
         rec(100, author.encode('utf-8')),
-        rec(106, b'2000-01-01'),                       # pubdate (required by some Kindle firmware)
+        rec(106, metadata.get('date', '2000-01-01').encode('utf-8')),
         rec(204, struct.pack('>I', 202)),               # creator software = kindlegen Mac
         rec(205, struct.pack('>I', 2)),                 # creator major
         rec(206, struct.pack('>I', 9)),                 # creator minor
         rec(207, struct.pack('>I', 0)),                 # creator build
         rec(501, b'EBOK'),                              # CDE type
         rec(503, title.encode('utf-8')),
-        rec(524, language.encode('utf-8')),             # language
+        rec(524, language.encode('utf-8')),
         rec(528, b'true'),                              # override_kindle_fonts
-        rec(125, struct.pack('>I', 0)),                 # num_of_resources
+        rec(125, struct.pack('>I', num_images)),
     ]
+    for code, key in [(101, 'publisher'), (103, 'description'), (105, 'subject')]:
+        val = metadata.get(key)
+        if val:
+            records.append(rec(code, val.encode('utf-8')[:500]))
+    if cover_offset >= 0:
+        records.append(rec(201, struct.pack('>I', cover_offset)))
+    if thumb_offset >= 0:
+        records.append(rec(202, struct.pack('>I', thumb_offset)))
 
     data = b''.join(records)
     raw_len = 12 + len(data)

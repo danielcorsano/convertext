@@ -67,9 +67,38 @@ class EpubConverter(BaseConverter):
             if lang is not None and lang.text:
                 doc.metadata['language'] = lang.text
 
+            for tag, key in [('dc:description', 'description'), ('dc:publisher', 'publisher'),
+                             ('dc:subject', 'subject'), ('dc:date', 'date')]:
+                el = opf.find(f'.//{tag}', ns)
+                if el is not None and el.text:
+                    doc.metadata[key] = el.text.strip()
+
             # Get spine order (reading order)
             manifest = {item.get('id'): item.get('href')
                        for item in opf.findall('.//opf:manifest/opf:item', ns)}
+            manifest_types = {item.get('id'): item.get('media-type', '')
+                             for item in opf.findall('.//opf:manifest/opf:item', ns)}
+
+            # Extract cover image
+            cover_id = None
+            cover_meta = opf.find('.//opf:metadata/opf:meta[@name="cover"]', ns)
+            if cover_meta is not None:
+                cover_id = cover_meta.get('content')
+            if not cover_id:
+                for item in opf.findall('.//opf:manifest/opf:item', ns):
+                    if 'cover-image' in (item.get('properties') or ''):
+                        cover_id = item.get('id')
+                        break
+            if cover_id and cover_id in manifest:
+                cover_href = manifest[cover_id]
+                if opf_dir and opf_dir != '.':
+                    cover_href = f"{opf_dir}/{cover_href}"
+                try:
+                    cover_data = zf.read(cover_href)
+                    fmt = manifest_types.get(cover_id, '').split('/')[-1].replace('jpeg', 'jpg')
+                    doc.images['cover'] = {'data': cover_data, 'format': fmt or 'jpg'}
+                except (KeyError, Exception):
+                    pass
 
             spine_items = opf.findall('.//opf:spine/opf:itemref', ns)
 
@@ -95,7 +124,7 @@ class EpubConverter(BaseConverter):
                                 text = element.get_text().strip()
                                 if text:
                                     doc.add_paragraph(text)
-                    except:
+                    except Exception:
                         continue
 
         return doc
