@@ -213,7 +213,7 @@ class ToEpubConverter(BaseConverter):
 
     @property
     def input_formats(self) -> List[str]:
-        return ['txt', 'html', 'md']
+        return ['txt', 'html', 'htm', 'md']
 
     @property
     def output_formats(self) -> List[str]:
@@ -384,7 +384,7 @@ class ToEpubConverter(BaseConverter):
     <dc:title>{self._escape_html(title)}</dc:title>
     <dc:creator>{self._escape_html(author)}</dc:creator>
     <dc:language>{language}</dc:language>
-    <meta property="dcterms:modified">{dt.datetime.now(dt.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
+    <meta property="dcterms:modified">{dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
   </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>

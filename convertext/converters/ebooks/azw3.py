@@ -75,7 +75,7 @@ class Azw3Converter(BaseConverter):
             encoding_val = struct.unpack('>I', rec0[28:32])[0]
 
             extra_data_flags = 0
-            if len(rec0) >= 244:
+            if mobi_header_len >= 228 and len(rec0) >= 244:
                 extra_data_flags = struct.unpack('>I', rec0[240:244])[0]
 
             exth_flags = struct.unpack('>I', rec0[128:132])[0]
@@ -97,15 +97,19 @@ class Azw3Converter(BaseConverter):
                             doc.metadata['title'] = rec_data.decode('utf-8', errors='ignore')
                         pos += rec_len
 
-            html_parts = []
+            file_size = path.stat().st_size
+            raw_parts = []
             for i in range(1, num_text_records + 1):
-                if i >= len(records) - 1:
+                if i >= len(records):
                     break
 
-                f.seek(records[i])
-                record_data = f.read(records[i + 1] - records[i])
+                start = records[i]
+                end = records[i + 1] if i + 1 < len(records) else file_size
+                f.seek(start)
+                record_data = f.read(end - start)
 
-                # Strip trailing bytes per extra_data_flags bits (sequential, high bits first)
+                # Strip trailing bytes per extra_data_flags bits (sequential, high
+                # bits first). Note: this stripper only handles up to 2-byte sizes.
                 n = 0
                 for bit in range(15, 0, -1):
                     if extra_data_flags & (1 << bit):
@@ -123,14 +127,13 @@ class Azw3Converter(BaseConverter):
 
                 try:
                     if compression == 2:
-                        text = self._palmdoc_decompress(record_data)
+                        raw_parts.append(self._palmdoc_decompress(record_data))
                     else:
-                        text = record_data
-                    html_parts.append(text.decode('utf-8', errors='ignore'))
+                        raw_parts.append(record_data)
                 except Exception:
                     continue
 
-            html_content = ''.join(html_parts)
+            html_content = b''.join(raw_parts).decode('utf-8', errors='ignore')
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(html_content, 'html.parser')
 
@@ -254,7 +257,7 @@ class ToAzw3Converter(BaseConverter):
 
     @property
     def input_formats(self) -> List[str]:
-        return ['txt', 'html', 'md', 'epub']
+        return ['txt', 'html', 'htm', 'md', 'epub']
 
     @property
     def output_formats(self) -> List[str]:
@@ -914,7 +917,6 @@ def _build_exth(title: str, author: str, language: str = 'en',
 
     records = [
         rec(100, author.encode('utf-8')),
-        rec(106, metadata.get('date', '2000-01-01').encode('utf-8')),
         rec(204, struct.pack('>I', 202)),               # creator software = kindlegen Mac
         rec(205, struct.pack('>I', 2)),                 # creator major
         rec(206, struct.pack('>I', 9)),                 # creator minor
@@ -929,6 +931,9 @@ def _build_exth(title: str, author: str, language: str = 'en',
         val = metadata.get(key)
         if val:
             records.append(rec(code, val.encode('utf-8')[:500]))
+    date = metadata.get('date')
+    if date:
+        records.append(rec(106, date.encode('utf-8')))
     if cover_offset >= 0:
         records.append(rec(201, struct.pack('>I', cover_offset)))
     if thumb_offset >= 0:

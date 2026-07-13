@@ -35,7 +35,7 @@ class ToMobiConverter(BaseConverter):
 
     @property
     def input_formats(self) -> List[str]:
-        return ['txt', 'html', 'md', 'epub']
+        return ['txt', 'html', 'htm', 'md', 'epub']
 
     @property
     def output_formats(self) -> List[str]:
@@ -207,7 +207,6 @@ def _build_exth(title: str, author: str, language: str = 'en',
 
     records = [
         rec(100, author.encode('utf-8')),
-        rec(106, metadata.get('date', '2000-01-01').encode('utf-8')),
         rec(503, title.encode('utf-8')),
         rec(524, language.encode('utf-8')),
         rec(125, struct.pack('>I', num_images)),
@@ -216,6 +215,9 @@ def _build_exth(title: str, author: str, language: str = 'en',
         val = metadata.get(key)
         if val:
             records.append(rec(code, val.encode('utf-8')[:500]))
+    date = metadata.get('date')
+    if date:
+        records.append(rec(106, date.encode('utf-8')))
     if cover_offset >= 0:
         records.append(rec(201, struct.pack('>I', cover_offset)))
     if thumb_offset >= 0:

@@ -200,7 +200,7 @@ class ToFB2Converter(BaseConverter):
 
     @property
     def input_formats(self) -> List[str]:
-        return ['txt', 'html', 'md']
+        return ['txt', 'html', 'htm', 'md']
 
     @property
     def output_formats(self) -> List[str]:
