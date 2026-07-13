@@ -6,7 +6,6 @@ from io import BytesIO
 
 from docx import Document as DocxDocument
 from docx.shared import Pt, RGBColor, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from convertext.converters.base import BaseConverter, Document
 from convertext.converters.utils import hex_to_rgb
@@ -23,9 +22,6 @@ class ToDocxConverter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['docx']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source in self.input_formats and target == 'docx'
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert to DOCX."""
         from convertext.core import ConversionEngine
@@ -35,20 +31,22 @@ class ToDocxConverter(BaseConverter):
         source_fmt = source_path.suffix.lstrip('.').lower()
 
         converter = registry.get_converter(source_fmt, 'html')
+        inter_fmt = 'html'
         if not converter:
             converter = registry.get_converter(source_fmt, 'txt')
+            inter_fmt = 'txt'
         if not converter:
             return False
 
         from tempfile import NamedTemporaryFile
-        with NamedTemporaryFile(mode='w', suffix='.html', delete=False) as tmp:
+        with NamedTemporaryFile(mode='w', suffix=f'.{inter_fmt}', delete=False) as tmp:
             tmp_path = Path(tmp.name)
 
         try:
             if not converter.convert(source_path, tmp_path, config):
                 return False
 
-            if tmp_path.suffix == '.html':
+            if inter_fmt == 'html':
                 doc = self._read_html(tmp_path, config)
             else:
                 doc = self._read_txt(tmp_path, config)

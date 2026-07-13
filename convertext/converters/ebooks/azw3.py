@@ -31,9 +31,6 @@ class Azw3Converter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['txt', 'html', 'md']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source in self.input_formats and target in self.output_formats
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         doc = self._read_azw3(source_path, config)
         self._apply_metadata_overrides(doc, source_path, config)
@@ -262,9 +259,6 @@ class ToAzw3Converter(BaseConverter):
     @property
     def output_formats(self) -> List[str]:
         return ['azw3']
-
-    def can_convert(self, source: str, target: str) -> bool:
-        return source in self.input_formats and target in self.output_formats
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         source_fmt = source_path.suffix.lstrip('.').lower()

@@ -41,9 +41,6 @@ class ToMobiConverter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['mobi']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source in self.input_formats and target in self.output_formats
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         doc = self._read_source(source_path, config)
         self._apply_metadata_overrides(doc, source_path, config)

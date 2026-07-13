@@ -1,5 +1,6 @@
 """Configuration management with priority merging."""
 
+import copy
 from pathlib import Path
 from typing import Any, Dict, Optional
 import yaml
@@ -26,13 +27,7 @@ class Config:
 
     def _deep_copy(self, d: Dict[str, Any]) -> Dict[str, Any]:
         """Deep copy a dictionary."""
-        result = {}
-        for key, value in d.items():
-            if isinstance(value, dict):
-                result[key] = self._deep_copy(value)
-            else:
-                result[key] = value
-        return result
+        return copy.deepcopy(d)
 
     def _load_configs(self):
         """Load configs in priority order."""

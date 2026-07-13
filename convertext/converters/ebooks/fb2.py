@@ -18,9 +18,6 @@ class FB2Converter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['txt', 'html', 'md']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source == 'fb2' and target in self.output_formats
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert FB2 to target format."""
         doc = self._read_fb2(source_path, config)
@@ -205,9 +202,6 @@ class ToFB2Converter(BaseConverter):
     @property
     def output_formats(self) -> List[str]:
         return ['fb2']
-
-    def can_convert(self, source: str, target: str) -> bool:
-        return source in self.input_formats and target == 'fb2'
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert to FB2."""

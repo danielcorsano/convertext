@@ -222,3 +222,17 @@ def test_mobi_palm_name_is_ascii_safe():
         palm_name = out.read_bytes()[:32].rstrip(b'\x00')
         palm_name.decode('ascii')  # ASCII-only: must not raise
         assert b' ' not in palm_name
+
+
+# ── P3.5 — fb2/odt register without dependency guards ─────────────────────────
+
+def test_fb2_and_odt_register_unconditionally():
+    from convertext.registry import ConverterRegistry
+    from convertext.converters.ebooks.fb2 import FB2Converter, ToFB2Converter
+    from convertext.converters.documents.odt import OdtConverter
+    r = ConverterRegistry()
+    for c in (FB2Converter(), ToFB2Converter(), OdtConverter()):
+        r.register(c)
+    assert r.get_converter('fb2', 'txt') is not None
+    assert r.get_converter('txt', 'fb2') is not None
+    assert r.get_converter('odt', 'txt') is not None

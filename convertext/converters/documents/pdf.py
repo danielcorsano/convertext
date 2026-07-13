@@ -19,9 +19,6 @@ class PDFConverter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['txt', 'html', 'md']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source == 'pdf' and target in self.output_formats
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert PDF to target format."""
         doc = self._read_pdf(source_path, config)

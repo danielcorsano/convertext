@@ -19,9 +19,6 @@ class OdtConverter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['txt', 'html', 'md']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source == 'odt' and target in self.output_formats
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert ODT to target format."""
         doc = self._read_odt(source_path, config)
@@ -58,7 +55,7 @@ class OdtConverter(BaseConverter):
                 creator = meta_xml.find('.//dc:creator', ns)
                 if creator is not None and creator.text:
                     doc.metadata['author'] = creator.text
-            except:
+            except Exception:
                 pass
 
             # Parse content

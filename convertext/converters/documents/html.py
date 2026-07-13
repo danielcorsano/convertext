@@ -19,9 +19,6 @@ class HtmlConverter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['txt', 'md']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source in self.input_formats and target in self.output_formats
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert HTML to target format."""
         doc = self._read_html(source_path, config)

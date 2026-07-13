@@ -22,9 +22,6 @@ class PdfToEpubConverter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['epub']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source == 'pdf' and target == 'epub'
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert PDF to EPUB directly."""
         doc = self._read_pdf(source_path, config)

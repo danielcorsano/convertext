@@ -30,19 +30,12 @@ def load_converters():
     register_converter(Azw3Converter())
     register_converter(ToAzw3Converter())
 
-    # Optional converters (gracefully skip if dependencies missing)
-    try:
-        from convertext.converters.ebooks.fb2 import FB2Converter, ToFB2Converter
-        register_converter(FB2Converter())
-        register_converter(ToFB2Converter())
-    except ImportError:
-        pass  # FB2 support requires lxml
+    from convertext.converters.ebooks.fb2 import FB2Converter, ToFB2Converter
+    register_converter(FB2Converter())
+    register_converter(ToFB2Converter())
 
-    try:
-        from convertext.converters.documents.odt import OdtConverter
-        register_converter(OdtConverter())
-    except ImportError:
-        pass  # ODT support requires odfpy
+    from convertext.converters.documents.odt import OdtConverter
+    register_converter(OdtConverter())
 
     # New output converters
     from convertext.converters.documents.to_pdf import ToPdfConverter

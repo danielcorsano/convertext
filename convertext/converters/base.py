@@ -91,10 +91,10 @@ class BaseConverter(ABC):
         """List of supported output formats (lowercase extensions)."""
         pass
 
-    @abstractmethod
     def can_convert(self, source_format: str, target_format: str) -> bool:
         """Check if this converter can handle the conversion."""
-        pass
+        return (source_format in self.input_formats
+                and target_format in self.output_formats)
 
     @abstractmethod
     def convert(
@@ -128,7 +128,3 @@ class BaseConverter(ABC):
         """Apply config-driven metadata overrides."""
         if config.get('documents', {}).get('title_from_filename', False):
             doc.metadata['title'] = source_path.stem
-
-    def extract_metadata(self, source_path: Path) -> Dict[str, Any]:
-        """Extract metadata from source file."""
-        return {}

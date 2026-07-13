@@ -21,9 +21,6 @@ class EpubConverter(BaseConverter):
     def output_formats(self) -> List[str]:
         return ['txt', 'html', 'md']
 
-    def can_convert(self, source: str, target: str) -> bool:
-        return source == 'epub' and target in self.output_formats
-
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert EPUB to target format."""
         doc = self._read_epub(source_path, config)
@@ -97,7 +94,7 @@ class EpubConverter(BaseConverter):
                     cover_data = zf.read(cover_href)
                     fmt = manifest_types.get(cover_id, '').split('/')[-1].replace('jpeg', 'jpg')
                     doc.images['cover'] = {'data': cover_data, 'format': fmt or 'jpg'}
-                except (KeyError, Exception):
+                except Exception:
                     pass
 
             spine_items = opf.findall('.//opf:spine/opf:itemref', ns)
@@ -218,9 +215,6 @@ class ToEpubConverter(BaseConverter):
     @property
     def output_formats(self) -> List[str]:
         return ['epub']
-
-    def can_convert(self, source: str, target: str) -> bool:
-        return source in self.input_formats and target == 'epub'
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert to EPUB."""
