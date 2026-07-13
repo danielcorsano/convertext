@@ -119,3 +119,106 @@ def test_exth_omits_date_when_absent():
     for build in (mobi_exth, azw3_exth):
         assert 106 not in _exth_types(build('T', 'A', metadata={}))
         assert 106 in _exth_types(build('T', 'A', metadata={'date': '2021-05-01'}))
+
+
+# ── P0.1 — KF8 TOC off-by-one when content precedes the first <h1> ─────────────
+
+def test_kf8_toc_offsets_with_preamble():
+    from convertext.converters.ebooks.azw3 import _build_kf8_content
+    doc = Document()
+    doc.add_paragraph('Front matter one.')
+    doc.add_paragraph('Front matter two.')
+    doc.add_heading('Chapter One', 1)
+    doc.add_paragraph('Body of chapter one.')
+    doc.add_heading('Chapter Two', 1)
+    doc.add_paragraph('Body of chapter two.')
+    _text, chunk_infos, toc = _build_kf8_content(doc, 'Title')
+
+    assert len(chunk_infos) == 3  # preamble + 2 chapters
+    assert [e['label'] for e in toc] == ['Chapter One', 'Chapter Two']
+    # Each TOC entry points at its OWN chapter chunk, not one chunk early.
+    assert toc[0]['offset'] == chunk_infos[1].pre_start
+    assert toc[1]['offset'] == chunk_infos[2].pre_start
+    assert toc[0]['offset'] > chunk_infos[0].pre_start  # past the preamble
+
+
+# ── P0.6 — directory config isolation + CLI override precedence ───────────────
+
+def test_directory_config_isolation_and_cli_precedence(tmp_path, monkeypatch):
+    from convertext.config import Config
+    from convertext.core import ConversionEngine
+    monkeypatch.setattr(Path, 'home', staticmethod(lambda: tmp_path))
+
+    dir_a = tmp_path / 'A'
+    dir_b = tmp_path / 'B'
+    out_a = tmp_path / 'out_a'
+    out_cli = tmp_path / 'out_cli'
+    for d in (dir_a, dir_b, out_a, out_cli):
+        d.mkdir()
+    (dir_a / 'convertext.yaml').write_text(f"output:\n  directory: {out_a}\n")
+    file_a = dir_a / 'a.txt'
+    file_a.write_text('A')
+    file_b = dir_b / 'b.txt'
+    file_b.write_text('B')
+
+    engine = ConversionEngine(Config())
+    cfg_a = engine._effective_config(file_a)
+    cfg_b = engine._effective_config(file_b)
+    # Directory config applies to A but does NOT leak into B.
+    assert cfg_a.get('output.directory') == str(out_a)
+    assert cfg_b.get('output.directory') is None
+    assert engine._get_target_path(file_a, 'md', cfg_a).parent == out_a
+    assert engine._get_target_path(file_b, 'md', cfg_b).parent == dir_b
+
+    # CLI override beats directory config.
+    engine2 = ConversionEngine(Config(), overrides={'output': {'directory': str(out_cli)}})
+    cfg_a2 = engine2._effective_config(file_a)
+    assert cfg_a2.get('output.directory') == str(out_cli)
+    assert engine2._get_target_path(file_a, 'md', cfg_a2).parent == out_cli
+
+
+# ── P1.6 — MOBI title defaults to filename stem; palm name is ASCII-safe ──────
+
+def _rec0_bytes(data: bytes) -> bytes:
+    num = struct.unpack('>H', data[76:78])[0]
+    offs = [struct.unpack('>I', data[78 + i * 8:82 + i * 8])[0] for i in range(num)]
+    return data[offs[0]:offs[1]]
+
+
+def _exth_value(data: bytes, code: int):
+    rec0 = _rec0_bytes(data)
+    idx = rec0.index(b'EXTH')
+    count = struct.unpack('>I', rec0[idx + 8:idx + 12])[0]
+    pos = idx + 12
+    for _ in range(count):
+        t = struct.unpack('>I', rec0[pos:pos + 4])[0]
+        ln = struct.unpack('>I', rec0[pos + 4:pos + 8])[0]
+        if t == code:
+            return rec0[pos + 8:pos + ln].decode('utf-8', errors='ignore')
+        pos += ln
+    return None
+
+
+def test_mobi_title_defaults_to_filename_stem():
+    from convertext.converters.ebooks.mobi import ToMobiConverter
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        txt = p / 'My Great Book.txt'
+        txt.write_text('Just a paragraph with no title header.')
+        out = p / 'My Great Book.mobi'
+        assert ToMobiConverter().convert(txt, out, {}) is True
+        assert _exth_value(out.read_bytes(), 503) == 'My Great Book'
+
+
+def test_mobi_palm_name_is_ascii_safe():
+    from convertext.converters.ebooks.mobi import ToMobiConverter
+    title = 'Café Déjà — Ω'
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        txt = p / 'x.txt'
+        txt.write_text(f'{title}\n{"=" * 8}\n\nBody text.')
+        out = p / 'x.mobi'
+        assert ToMobiConverter().convert(txt, out, {}) is True
+        palm_name = out.read_bytes()[:32].rstrip(b'\x00')
+        palm_name.decode('ascii')  # ASCII-only: must not raise
+        assert b' ' not in palm_name

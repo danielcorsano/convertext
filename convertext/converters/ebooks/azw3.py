@@ -261,7 +261,7 @@ class ToAzw3Converter(BaseConverter):
 
     @property
     def output_formats(self) -> List[str]:
-        return ['azw3', 'mobi']
+        return ['azw3']
 
     def can_convert(self, source: str, target: str) -> bool:
         return source in self.input_formats and target in self.output_formats
@@ -518,27 +518,30 @@ def _build_kf8_content(doc: Document, title: str):
     Each h1-delimited section becomes a separate chunk with its own skeleton.
     Returns (text_bytes, list_of_ChunkInfo, toc_entries).
     """
-    chunks_content = []
-    chapter_titles = []
+    # Split into chunks, tracking each chunk's chapter title (None for a
+    # titleless preamble of blocks preceding the first h1).
+    chunks = []
     current = []
+    current_title = None
     for block in doc.content:
         if block['type'] == 'heading' and block['level'] == 1:
             if current:
-                chunks_content.append(current)
+                chunks.append((current_title, current))
             current = [block]
-            chapter_titles.append(block['data'])
+            current_title = block['data']
         else:
             current.append(block)
     if current:
-        chunks_content.append(current)
-    if not chunks_content:
-        chunks_content = [[{'type': 'paragraph', 'data': ' '}]]
+        chunks.append((current_title, current))
+    if not chunks:
+        chunks = [(None, [{'type': 'paragraph', 'data': ' '}])]
 
     text_parts = []
     chunk_infos = []
+    toc_entries = []
     offset = 0
 
-    for i, blocks in enumerate(chunks_content):
+    for i, (chapter_title, blocks) in enumerate(chunks):
         aid = _to_base32(i)
         skeleton = (
             '<?xml version="1.0" encoding="UTF-8"?>'
@@ -568,16 +571,12 @@ def _build_kf8_content(doc: Document, title: str):
         content_length = len(body)
 
         chunk_infos.append(ChunkInfo(pre_start, pre_length, insert_offset, content_start, content_length))
+        if chapter_title is not None:
+            toc_entries.append({'label': chapter_title, 'offset': pre_start,
+                                'length': pre_length + content_length})
         text_parts.append(skeleton)
         text_parts.append(body)
         offset += pre_length + content_length
-
-    # Build TOC entries from chapter titles and chunk positions
-    toc_entries = []
-    for i, ci in enumerate(chunk_infos):
-        if i < len(chapter_titles):
-            section_len = ci.pre_length + ci.content_length
-            toc_entries.append({'label': chapter_titles[i], 'offset': ci.pre_start, 'length': section_len})
 
     return b''.join(text_parts), chunk_infos, toc_entries
 

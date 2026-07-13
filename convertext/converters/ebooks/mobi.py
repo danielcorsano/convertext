@@ -326,8 +326,8 @@ def _write_palmdb(path: Path, all_records: List[bytes], title: str) -> bool:
         pos += len(rec)
 
     now = int(time.time()) + _PALM_EPOCH
-    palm_name = title.encode('utf-8', errors='replace')[:31]
-    palm_name = palm_name + b'\x00' * (32 - len(palm_name))
+    name = ''.join(c if 32 <= ord(c) < 128 else '_' for c in title).replace(' ', '_')
+    palm_name = name[:31].encode('ascii').ljust(32, b'\x00')
 
     header = palm_name                                        # 32
     header += struct.pack('>HH', 0, 0)                       # attributes, version → 36
@@ -353,6 +353,7 @@ def _write_palmdb(path: Path, all_records: List[bytes], title: str) -> bool:
 
 def _write_mobi(doc: Document, path: Path) -> bool:
     """Orchestrate MOBI v6 file creation from a Document."""
+    doc.metadata['title'] = doc.metadata.get('title') or path.stem
     html_str, toc_entries = _doc_to_html(doc)
     html_bytes = html_str.encode('utf-8')
 

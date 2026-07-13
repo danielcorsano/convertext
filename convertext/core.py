@@ -24,10 +24,25 @@ class ConversionResult:
 class ConversionEngine:
     """Main conversion orchestrator."""
 
-    def __init__(self, config: Config, keep_intermediate: bool = False):
+    def __init__(self, config: Config, keep_intermediate: bool = False,
+                 overrides: Optional[dict] = None):
         self.config = config
+        self.overrides = overrides or {}
         self.registry = get_registry()
         self.keep_intermediate = keep_intermediate
+
+    def _effective_config(self, source_path: Path) -> Config:
+        """Build a per-file config: base copy → directory config → CLI overrides.
+
+        Overrides are applied last so CLI beats directory config, and each file
+        starts from a fresh copy so directory configs never leak between files.
+        """
+        cfg = Config.__new__(Config)
+        cfg.config = self.config._deep_copy(self.config.config)
+        cfg.load_file_config(source_path)
+        if self.overrides:
+            cfg.override(self.overrides)
+        return cfg
 
     def convert(
         self,
@@ -35,8 +50,7 @@ class ConversionEngine:
         target_format: str
     ) -> ConversionResult:
         """Convert a file to target format (supports multi-hop)."""
-        # Load file-specific config (searches from file's dir up to home)
-        self.config.load_file_config(source_path)
+        config = self._effective_config(source_path)
 
         source_format = source_path.suffix.lstrip('.').lower()
         target_format = target_format.lstrip('.').lower()
@@ -44,12 +58,12 @@ class ConversionEngine:
         # Try direct conversion first
         converter = self.registry.get_converter(source_format, target_format)
         if converter:
-            return self._direct_convert(source_path, target_format, converter)
+            return self._direct_convert(source_path, target_format, converter, config)
 
         # Try multi-hop conversion
         path = self.registry.find_conversion_path(source_format, target_format)
         if path and len(path) > 2:  # Multi-hop needed
-            return self._multihop_convert(source_path, target_format, path)
+            return self._multihop_convert(source_path, target_format, path, config)
 
         # No conversion path found
         return ConversionResult(
@@ -65,12 +79,13 @@ class ConversionEngine:
         self,
         source_path: Path,
         target_format: str,
-        converter
+        converter,
+        config: Config
     ) -> ConversionResult:
         """Perform direct single-hop conversion."""
-        target_path = self._get_target_path(source_path, target_format)
+        target_path = self._get_target_path(source_path, target_format, config)
 
-        if target_path.exists() and not self.config.get('output.overwrite', False):
+        if target_path.exists() and not config.get('output.overwrite', False):
             return ConversionResult(
                 success=False,
                 source_path=source_path,
@@ -84,7 +99,7 @@ class ConversionEngine:
             success = converter.convert(
                 source_path,
                 target_path,
-                self.config.config
+                config.config
             )
 
             if success:
@@ -119,12 +134,13 @@ class ConversionEngine:
         self,
         source_path: Path,
         target_format: str,
-        path: List[str]
+        path: List[str],
+        config: Config
     ) -> ConversionResult:
         """Perform multi-hop conversion through intermediate formats."""
-        target_path = self._get_target_path(source_path, target_format)
+        target_path = self._get_target_path(source_path, target_format, config)
 
-        if target_path.exists() and not self.config.get('output.overwrite', False):
+        if target_path.exists() and not config.get('output.overwrite', False):
             return ConversionResult(
                 success=False,
                 source_path=source_path,
@@ -163,7 +179,7 @@ class ConversionEngine:
                     intermediate_files.append(next_file)
 
                 # Perform conversion
-                success = converter.convert(current_file, next_file, self.config.config)
+                success = converter.convert(current_file, next_file, config.config)
                 if not success:
                     raise Exception(f"Conversion failed: {source_fmt} -> {target_fmt}")
 
@@ -205,16 +221,17 @@ class ConversionEngine:
                 hops=len(path) - 1
             )
 
-    def _get_target_path(self, source_path: Path, target_format: str) -> Path:
+    def _get_target_path(self, source_path: Path, target_format: str,
+                         config: Config) -> Path:
         """Determine output file path based on config."""
-        output_dir = self.config.get('output.directory')
+        output_dir = config.get('output.directory')
 
         if output_dir:
             output_dir = Path(output_dir)
         else:
             output_dir = source_path.parent
 
-        pattern = self.config.get('output.filename_pattern', '{name}.{ext}')
+        pattern = config.get('output.filename_pattern', '{name}.{ext}')
         filename = pattern.format(
             name=source_path.stem,
             ext=target_format

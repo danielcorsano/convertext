@@ -114,11 +114,8 @@ def main(
         overrides['output'] = overrides.get('output', {})
         overrides['output']['overwrite'] = True
 
-    if overrides:
-        cfg.override(overrides)
-
     formats = [f.strip().lower() for f in output_formats.split(',')]
-    engine = ConversionEngine(cfg, keep_intermediate=keep_intermediate)
+    engine = ConversionEngine(cfg, keep_intermediate=keep_intermediate, overrides=overrides)
     source_files = [Path(f) for f in files]
     success_count = 0
     fail_count = 0

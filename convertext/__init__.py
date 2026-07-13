@@ -30,12 +30,14 @@ def convert(source: Union[str, Path], format: str, output: Optional[str] = None,
     load_converters()
     cfg = Config()
 
+    overrides = {'output': {}}
     if output:
-        cfg.override({'output': {'directory': output}})
+        overrides['output']['directory'] = output
     if kwargs.get('overwrite'):
-        cfg.override({'output': {'overwrite': True}})
+        overrides['output']['overwrite'] = True
 
-    engine = ConversionEngine(cfg, keep_intermediate=kwargs.get('keep_intermediate', False))
+    engine = ConversionEngine(cfg, keep_intermediate=kwargs.get('keep_intermediate', False),
+                              overrides=overrides)
     result = engine.convert(Path(source), format)
 
     return result.success

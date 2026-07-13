@@ -143,7 +143,8 @@ def test_azw3_can_convert():
     assert writer.can_convert('html', 'azw3')
     assert writer.can_convert('md', 'azw3')
     assert writer.can_convert('epub', 'azw3')
-    assert writer.can_convert('txt', 'mobi')
+    assert writer.can_convert('htm', 'azw3')
+    assert not writer.can_convert('txt', 'mobi')  # .mobi routes to ToMobiConverter
     assert not writer.can_convert('azw3', 'txt')
 
     reader = Azw3Converter()
@@ -404,19 +405,20 @@ def test_azw3_large_content():
 
 
 def test_mobi_output_format():
-    """Can also output .mobi files."""
+    """.mobi targets route to the MOBI v6 writer; KF8 no longer claims .mobi."""
+    from convertext.registry import ConverterRegistry
     from convertext.converters.ebooks.azw3 import ToAzw3Converter
-    converter = ToAzw3Converter()
+    from convertext.converters.ebooks.mobi import ToMobiConverter
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmppath = Path(tmpdir)
-        txt_file = tmppath / "test.txt"
-        txt_file.write_text("Test\n\nContent paragraph.")
-        mobi_file = tmppath / "test.mobi"
-        result = converter.convert(txt_file, mobi_file, {})
-        assert result is True
-        text = _independent_parse_kf8(mobi_file)
-        assert "Content paragraph" in text
+    assert 'mobi' not in ToAzw3Converter().output_formats
+    assert not ToAzw3Converter().can_convert('txt', 'mobi')
+
+    # Register KF8 first: routing must still resolve .mobi to ToMobiConverter.
+    reg = ConverterRegistry()
+    reg.register(ToAzw3Converter())
+    reg.register(ToMobiConverter())
+    assert isinstance(reg.get_converter('txt', 'mobi'), ToMobiConverter)
+    assert isinstance(reg.get_converter('txt', 'azw3'), ToAzw3Converter)
 
 
 def test_utf8_boundary_splitting():
