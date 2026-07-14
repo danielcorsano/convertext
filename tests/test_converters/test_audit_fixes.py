@@ -356,3 +356,15 @@ def test_div_structured_html_captured():
     paras = [b for b in doc.content if b['type'] == 'paragraph']
     assert [b['data'] for b in paras] == ['First para.', 'Second para.']
     assert 'runs' in paras[1]  # inline em preserved even inside a div
+
+
+# ── P1.4 — multi-hop routing prefers a structure-preserving intermediate ──────
+
+def test_pdf_to_mobi_avoids_txt_intermediate():
+    from convertext.converters.loader import load_converters
+    from convertext.registry import get_registry
+    load_converters()
+    path = get_registry().find_conversion_path('pdf', 'mobi')
+    assert path is not None
+    assert 'txt' not in path  # a txt roundtrip would destroy headings/TOC
+    assert path[1] in ('epub', 'html')  # rich intermediate, deterministically

@@ -4,13 +4,16 @@ from typing import Dict, List, Optional, Tuple
 from collections import deque
 from convertext.converters.base import BaseConverter
 
+# Lower rank = preferred intermediate for multi-hop routing (keeps structure).
+_INTERMEDIATE_PREFERENCE = {'epub': 0, 'html': 1, 'htm': 1, 'md': 2, 'txt': 3}
+
 
 class ConverterRegistry:
     """Registry for all available converters."""
 
     def __init__(self):
         self._converters: List[BaseConverter] = []
-        self._format_map: Dict[str, List[str]] = {}
+        self._format_map: Dict[str, set] = {}
         self._path_cache: Dict[Tuple[str, str], Optional[List[str]]] = {}
 
     def register(self, converter: BaseConverter):
@@ -19,11 +22,9 @@ class ConverterRegistry:
         self._update_format_map(converter)
 
     def _update_format_map(self, converter: BaseConverter):
-        """Update internal format compatibility map."""
+        """Update internal format compatibility map (deduped via sets)."""
         for src in converter.input_formats:
-            if src not in self._format_map:
-                self._format_map[src] = []
-            self._format_map[src].extend(converter.output_formats)
+            self._format_map.setdefault(src, set()).update(converter.output_formats)
 
     def get_converter(
         self,
@@ -85,8 +86,12 @@ class ConverterRegistry:
             if len(path) > max_hops + 1:
                 continue
 
-            # Get all possible next formats from current format
-            next_formats = self._format_map.get(current_format, [])
+            # Expand candidates deterministically, preferring structure-preserving
+            # intermediates so pdf->mobi routes via epub/html, not txt.
+            next_formats = sorted(
+                self._format_map.get(current_format, ()),
+                key=lambda f: (_INTERMEDIATE_PREFERENCE.get(f, 4), f),
+            )
 
             for next_format in next_formats:
                 if next_format == target_format:
