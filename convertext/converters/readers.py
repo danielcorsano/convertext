@@ -104,11 +104,16 @@ def collect_blocks(soup, doc: Document) -> None:
     writers preserve bold/italic), lists, tables, blockquotes and code blocks.
     Elements nested inside a captured container are skipped (rendered whole).
     """
-    tags = ['p', 'pre', *_HEADINGS, *_CONTAINERS]
+    tags = ['p', 'pre', 'div', *_HEADINGS, *_CONTAINERS]
     for el in soup.find_all(tags):
         if el.find_parent(_CONTAINERS):
             continue  # rendered as part of its enclosing container
         name = el.name.lower()
+
+        # Only leaf content <div>s become paragraphs; container divs are skipped,
+        # so div-structured EPUBs survive and content is not double-captured.
+        if name == 'div' and el.find(tags):
+            continue
 
         if name in _HEADINGS:
             text = el.get_text().strip()
@@ -134,7 +139,7 @@ def collect_blocks(soup, doc: Document) -> None:
                 else:
                     doc.add_table(rows=rows)
 
-        else:  # p, pre, blockquote
+        else:  # p, pre, blockquote, leaf div
             text = el.get_text().strip()
             if not text:
                 continue

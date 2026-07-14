@@ -340,3 +340,19 @@ def test_markdown_tables_and_lists_captured():
     html, _ = _doc_to_html(doc)
     assert '<table>' in html and '<td>1</td>' in html
     assert '<ul>' in html and '<li>one</li>' in html
+
+
+# ── P1.1 — div-structured content is captured, not lost ───────────────────────
+
+def test_div_structured_html_captured():
+    from convertext.converters.readers import read_html
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / 'a.html'
+        p.write_text('<html><body>'
+                     '<div class="chapter"><div class="para">First para.</div>'
+                     '<div class="para">Second <em>para</em>.</div></div>'
+                     '</body></html>')
+        doc = read_html(p, {})
+    paras = [b for b in doc.content if b['type'] == 'paragraph']
+    assert [b['data'] for b in paras] == ['First para.', 'Second para.']
+    assert 'runs' in paras[1]  # inline em preserved even inside a div
