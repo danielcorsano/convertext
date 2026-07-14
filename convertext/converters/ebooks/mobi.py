@@ -60,21 +60,27 @@ class ToMobiConverter(BaseConverter):
 def _doc_to_html(doc: Document) -> tuple:
     """Convert Document to minimal MOBI-compatible HTML. Returns (html_str, toc_entries)."""
     parts = ['<html><head><meta charset="utf-8"/></head><body>']
+    running = len(parts[0].encode('utf-8'))  # bytes of '\n'.join(parts) so far
     toc_entries = []
     first_h1 = True
     for block in doc.content:
         if block.get('type') == 'heading' and block.get('level', 1) == 1:
             if not first_h1:
-                parts.append('<mbp:pagebreak/>')
-            offset = len('\n'.join(parts).encode('utf-8')) + 1  # +1 for upcoming \n
+                pb = '<mbp:pagebreak/>'
+                parts.append(pb)
+                running += 1 + len(pb.encode('utf-8'))
+            offset = running + 1  # +1 for the \n before the upcoming fragment
             toc_entries.append({'label': block.get('data', ''), 'offset': offset})
             first_h1 = False
         frag = block_to_html(block)
         if frag:
             parts.append(frag)
-    parts.append('</body></html>')
+            running += 1 + len(frag.encode('utf-8'))
+    tail = '</body></html>'
+    parts.append(tail)
+    running += 1 + len(tail.encode('utf-8'))
     html_str = '\n'.join(parts)
-    html_len = len(html_str.encode('utf-8'))
+    html_len = running
     # Fill in section lengths
     for i, entry in enumerate(toc_entries):
         next_off = toc_entries[i + 1]['offset'] if i + 1 < len(toc_entries) else html_len

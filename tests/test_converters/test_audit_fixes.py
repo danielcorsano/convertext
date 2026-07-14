@@ -393,3 +393,34 @@ def test_pdf_reader_detects_headings_and_pdf_to_epub():
         epub = p / 'out.epub'
         assert PdfToEpubConverter().convert(pdf, epub, {}) is True
         assert epub.stat().st_size > 0
+
+
+# ── P2.1 — PalmDOC compressor is lossless and compresses well (full window) ────
+
+def test_palmdoc_compress_lossless_and_compact():
+    import random
+    from convertext.converters.ebooks.palmdoc import palmdoc_compress, palmdoc_decompress
+    rng = random.Random(7)
+    words = "the quick brown fox jumps over a lazy dog reading kindle books".split()
+    text = ' '.join(rng.choice(words) for _ in range(4000)).encode('utf-8')
+    comp = palmdoc_compress(text)
+    assert palmdoc_decompress(comp) == text          # lossless roundtrip
+    assert len(comp) < len(text) * 0.6               # full-window compression
+
+
+# ── P2.2 — MOBI TOC offsets computed in O(n) match true byte positions ────────
+
+def test_mobi_toc_offsets_match_byte_positions():
+    from convertext.converters.ebooks.mobi import _doc_to_html
+    doc = Document()
+    doc.add_paragraph('Intro paragraph before any chapter.')
+    doc.add_heading('Chapter One', 1)
+    doc.add_paragraph('Body of chapter one.')
+    doc.add_heading('Chapter Two', 1)
+    doc.add_paragraph('Body of chapter two.')
+    html_str, toc = _doc_to_html(doc)
+    hb = html_str.encode('utf-8')
+    assert len(toc) == 2
+    for entry in toc:
+        assert hb[entry['offset']:entry['offset'] + 3] == b'<h1'  # offset lands on the h1
+    assert toc[-1]['offset'] + toc[-1]['length'] == len(hb)       # lengths span the doc

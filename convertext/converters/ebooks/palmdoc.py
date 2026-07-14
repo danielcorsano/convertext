@@ -15,30 +15,29 @@ EOF = b'\xe9\x8e\x0d\x0a'
 
 
 def palmdoc_compress(data: bytes) -> bytes:
-    """Compress data using PalmDOC LZ77 compression."""
+    """Compress data using PalmDOC LZ77 compression.
+
+    Anchors a 3-byte match with bytes.rfind over the full 2047-byte window
+    (C-speed), then extends up to 10 bytes; falls back to a literal on a miss.
+    """
     result = bytearray()
     i = 0
+    n = len(data)
 
-    while i < len(data):
+    while i < n:
         best_len = 0
         best_dist = 0
 
-        if i >= 3:
-            max_dist = min(2047, i, 256)  # 256-byte window: fast with minimal size cost
-            for dist in range(1, max_dist + 1):
-                pos = i - dist
-                match_len = 0
-                while (match_len < 10 and
-                       i + match_len < len(data) and
-                       data[pos + match_len] == data[i + match_len]):
-                    match_len += 1
-                    if pos + match_len >= i:
-                        break
-                if match_len >= 3 and match_len > best_len:
-                    best_len = match_len
-                    best_dist = dist
-                    if best_len == 10:
-                        break
+        if n - i >= 3 and i >= 1:
+            window_start = max(0, i - 2047)
+            found = data.rfind(data[i:i + 3], window_start, i + 2)
+            if found != -1 and found < i:
+                length = 3
+                while (length < 10 and i + length < n
+                       and data[found + length] == data[i + length]):
+                    length += 1
+                best_len = length
+                best_dist = i - found
 
         if best_len >= 3:
             code = 0x8000 | (best_dist << 3) | (best_len - 3)
@@ -49,7 +48,7 @@ def palmdoc_compress(data: bytes) -> bytes:
             i += 1
         else:
             end = i + 1
-            while end < len(data) and end - i < 8 and not (0x09 <= data[end] <= 0x7F):
+            while end < n and end - i < 8 and not (0x09 <= data[end] <= 0x7F):
                 end += 1
             count = end - i
             result.append(count)
