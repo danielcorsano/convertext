@@ -304,3 +304,21 @@ def test_docx_runs_grouped_into_single_paragraph():
         # one paragraph (P0.8), with the bold run rendered inline (P1.2)
         assert '<p>The word <b>bold</b> is emphasized.</p>' in html
         assert html.count('<p>') == 1  # one paragraph, not three
+
+
+# ── P1.2 — inline bold/italic preserved from HTML/EPUB into the ebook path ─────
+
+def test_html_inline_formatting_preserved_to_ebook():
+    from convertext.converters.readers import read_html
+    from convertext.converters.ebooks.mobi import _doc_to_html
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / 'a.html'
+        p.write_text('<html><body><p>A <strong>bold</strong> and '
+                     '<em>italic</em> word.</p></body></html>')
+        doc = read_html(p, {})
+    paras = [b for b in doc.content if b['type'] == 'paragraph']
+    assert len(paras) == 1 and 'runs' in paras[0]
+    html, _ = _doc_to_html(doc)
+    assert '<b>bold</b>' in html
+    assert '<i>italic</i>' in html
+    assert html.count('<p>') == 1  # still a single paragraph

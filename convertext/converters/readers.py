@@ -57,7 +57,7 @@ def read_html(path: Path, config: Optional[Dict[str, Any]] = None) -> Document:
         if h1 and h1.get_text().strip():
             doc.metadata['title'] = h1.get_text().strip()
 
-    _collect_blocks(soup, doc)
+    collect_blocks(soup, doc)
     return doc
 
 
@@ -69,12 +69,35 @@ def read_markdown(path: Path, config: Optional[Dict[str, Any]] = None) -> Docume
     with open(path, 'r', encoding=_encoding(config)) as f:
         content = f.read()
     soup = BeautifulSoup(markdown.markdown(content), 'html.parser')
-    _collect_blocks(soup, doc)
+    collect_blocks(soup, doc)
     return doc
 
 
-def _collect_blocks(soup, doc: Document) -> None:
-    """Append paragraph/heading blocks from a parsed HTML tree."""
+def _paragraph_runs(el):
+    """Split a <p>-like element into inline runs carrying bold/italic flags."""
+    from bs4 import NavigableString
+    runs = []
+
+    def walk(node, bold, italic):
+        for child in node.children:
+            if isinstance(child, NavigableString):
+                s = str(child)
+                if s:
+                    runs.append({'text': s, 'bold': bold, 'italic': italic})
+            else:
+                name = (child.name or '').lower()
+                walk(child, bold or name in ('b', 'strong'), italic or name in ('i', 'em'))
+
+    walk(el, False, False)
+    return runs
+
+
+def collect_blocks(soup, doc: Document) -> None:
+    """Append paragraph/heading blocks from a parsed HTML tree.
+
+    Paragraphs that contain <b>/<i>/<em>/<strong> keep their inline formatting
+    as runs so rich writers can preserve bold/italic.
+    """
     for el in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
         text = el.get_text().strip()
         if not text:
@@ -82,4 +105,8 @@ def _collect_blocks(soup, doc: Document) -> None:
         if el.name.startswith('h'):
             doc.add_heading(text, int(el.name[1]))
         else:
-            doc.add_paragraph(text)
+            runs = _paragraph_runs(el)
+            if any(r['bold'] or r['italic'] for r in runs):
+                doc.add_paragraph(text, runs=runs)
+            else:
+                doc.add_paragraph(text)

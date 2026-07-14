@@ -7,7 +7,7 @@ import zipfile
 from lxml import etree
 from bs4 import BeautifulSoup
 
-from convertext.converters.readers import read_html, read_markdown, read_txt
+from convertext.converters.readers import read_html, read_markdown, read_txt, collect_blocks
 from convertext.converters.ebooks.htmlbuild import block_to_html
 from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
@@ -112,17 +112,7 @@ class EpubConverter(BaseConverter):
                     try:
                         content = zf.read(content_path).decode('utf-8', errors='ignore')
                         soup = BeautifulSoup(content, 'html.parser')
-
-                        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-                            if element.name.startswith('h'):
-                                level = int(element.name[1])
-                                text = element.get_text().strip()
-                                if text:
-                                    doc.add_heading(text, level)
-                            elif element.name == 'p':
-                                text = element.get_text().strip()
-                                if text:
-                                    doc.add_paragraph(text)
+                        collect_blocks(soup, doc)
                     except Exception:
                         continue
 
