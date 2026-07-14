@@ -322,3 +322,21 @@ def test_html_inline_formatting_preserved_to_ebook():
     assert '<b>bold</b>' in html
     assert '<i>italic</i>' in html
     assert html.count('<p>') == 1  # still a single paragraph
+
+
+# ── P1.3 — markdown tables and lists are captured, not dropped ─────────────────
+
+def test_markdown_tables_and_lists_captured():
+    from convertext.converters.readers import read_markdown
+    from convertext.converters.ebooks.mobi import _doc_to_html
+    md = "# Title\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n- one\n- two\n"
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / 'a.md'
+        p.write_text(md)
+        doc = read_markdown(p, {})
+    types = [b['type'] for b in doc.content]
+    assert 'table' in types
+    assert 'list' in types
+    html, _ = _doc_to_html(doc)
+    assert '<table>' in html and '<td>1</td>' in html
+    assert '<ul>' in html and '<li>one</li>' in html

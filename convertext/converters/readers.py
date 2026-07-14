@@ -68,7 +68,8 @@ def read_markdown(path: Path, config: Optional[Dict[str, Any]] = None) -> Docume
     doc = Document()
     with open(path, 'r', encoding=_encoding(config)) as f:
         content = f.read()
-    soup = BeautifulSoup(markdown.markdown(content), 'html.parser')
+    html = markdown.markdown(content, extensions=['tables', 'fenced_code'])
+    soup = BeautifulSoup(html, 'html.parser')
     collect_blocks(soup, doc)
     return doc
 
@@ -92,19 +93,51 @@ def _paragraph_runs(el):
     return runs
 
 
-def collect_blocks(soup, doc: Document) -> None:
-    """Append paragraph/heading blocks from a parsed HTML tree.
+_HEADINGS = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}
+_CONTAINERS = ['ul', 'ol', 'table', 'blockquote']
 
-    Paragraphs that contain <b>/<i>/<em>/<strong> keep their inline formatting
-    as runs so rich writers can preserve bold/italic.
+
+def collect_blocks(soup, doc: Document) -> None:
+    """Append content blocks from a parsed HTML tree.
+
+    Captures headings, paragraphs (keeping <b>/<i>/<em>/<strong> as runs so rich
+    writers preserve bold/italic), lists, tables, blockquotes and code blocks.
+    Elements nested inside a captured container are skipped (rendered whole).
     """
-    for el in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-        text = el.get_text().strip()
-        if not text:
-            continue
-        if el.name.startswith('h'):
-            doc.add_heading(text, int(el.name[1]))
-        else:
+    tags = ['p', 'pre', *_HEADINGS, *_CONTAINERS]
+    for el in soup.find_all(tags):
+        if el.find_parent(_CONTAINERS):
+            continue  # rendered as part of its enclosing container
+        name = el.name.lower()
+
+        if name in _HEADINGS:
+            text = el.get_text().strip()
+            if text:
+                doc.add_heading(text, int(name[1]))
+
+        elif name in ('ul', 'ol'):
+            items = [li.get_text().strip() for li in el.find_all('li', recursive=False)
+                     if li.get_text().strip()]
+            if items:
+                doc.add_list(items, ordered=(name == 'ol'))
+
+        elif name == 'table':
+            rows = []
+            for tr in el.find_all('tr'):
+                cells = [c.get_text().strip() for c in tr.find_all(['td', 'th'])]
+                if cells:
+                    rows.append(cells)
+            if rows:
+                first = el.find('tr')
+                if first is not None and first.find('th') is not None:
+                    doc.add_table(rows=rows[1:], headers=rows[0])
+                else:
+                    doc.add_table(rows=rows)
+
+        else:  # p, pre, blockquote
+            text = el.get_text().strip()
+            if not text:
+                continue
             runs = _paragraph_runs(el)
             if any(r['bold'] or r['italic'] for r in runs):
                 doc.add_paragraph(text, runs=runs)
