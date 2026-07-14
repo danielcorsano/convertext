@@ -31,9 +31,9 @@ def test_epub_datetime_uses_timezone_utc():
     import convertext.converters.ebooks.epub as epub_mod
     import convertext.converters.documents.pdf_to_epub as p2e_mod
     for mod in (epub_mod, p2e_mod):
-        src = inspect.getsource(mod)
-        assert 'dt.UTC' not in src, f"{mod.__name__} uses dt.UTC (crashes on <3.11)"
-        assert 'dt.timezone.utc' in src
+        assert 'dt.UTC' not in inspect.getsource(mod), f"{mod.__name__} uses dt.UTC"
+    # the OPF's dcterms:modified timestamp now lives only in the epub writer
+    assert 'dt.timezone.utc' in inspect.getsource(epub_mod)
 
 
 def test_txt_to_epub_succeeds():
@@ -368,3 +368,28 @@ def test_pdf_to_mobi_avoids_txt_intermediate():
     assert path is not None
     assert 'txt' not in path  # a txt roundtrip would destroy headings/TOC
     assert path[1] in ('epub', 'html')  # rich intermediate, deterministically
+
+
+# ── P1.5 / P3.4 — one PDF reader with heading detection; pdf->epub composed ────
+
+def test_pdf_reader_detects_headings_and_pdf_to_epub():
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import letter
+    from convertext.converters.readers import read_pdf
+    from convertext.converters.documents.pdf_to_epub import PdfToEpubConverter
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        pdf = p / 'in.pdf'
+        c = canvas.Canvas(str(pdf), pagesize=letter)
+        c.drawString(72, 720, "CHAPTER ONE")
+        c.drawString(72, 700, "This is the first body paragraph of the chapter.")
+        c.showPage()
+        c.save()
+
+        doc = read_pdf(pdf, {})
+        assert any(b['type'] == 'heading' and 'CHAPTER ONE' in b['data'] for b in doc.content)
+        assert any(b['type'] == 'paragraph' for b in doc.content)
+
+        epub = p / 'out.epub'
+        assert PdfToEpubConverter().convert(pdf, epub, {}) is True
+        assert epub.stat().st_size > 0

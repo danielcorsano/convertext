@@ -3,8 +3,7 @@
 from pathlib import Path
 from typing import Any, Dict, List
 
-import pypdf
-
+from convertext.converters.readers import read_pdf
 from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
 
@@ -21,7 +20,7 @@ class PDFConverter(BaseConverter):
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert PDF to target format."""
-        doc = self._read_pdf(source_path, config)
+        doc = read_pdf(source_path, config)
         self._apply_metadata_overrides(doc, source_path, config)
 
         target_fmt = target_path.suffix.lstrip('.').lower()
@@ -33,27 +32,6 @@ class PDFConverter(BaseConverter):
             return self._write_md(doc, target_path)
 
         return False
-
-    def _read_pdf(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read PDF into intermediate Document."""
-        doc = Document()
-
-        with open(path, 'rb') as f:
-            reader = pypdf.PdfReader(f)
-
-            if reader.metadata:
-                doc.metadata = {
-                    'title': reader.metadata.get('/Title', ''),
-                    'author': reader.metadata.get('/Author', ''),
-                    'subject': reader.metadata.get('/Subject', ''),
-                }
-
-            for page in reader.pages:
-                text = page.extract_text()
-                if text.strip():
-                    doc.add_paragraph(text)
-
-        return doc
 
     def _write_txt(self, doc: Document, path: Path) -> bool:
         """Write Document to plain text."""

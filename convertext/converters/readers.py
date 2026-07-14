@@ -6,6 +6,7 @@ converter that ingests these formats. Plain-text parsing understands the
 paragraphs and headings (h1-h6).
 """
 
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -72,6 +73,54 @@ def read_markdown(path: Path, config: Optional[Dict[str, Any]] = None) -> Docume
     soup = BeautifulSoup(html, 'html.parser')
     collect_blocks(soup, doc)
     return doc
+
+
+def read_pdf(path: Path, config: Optional[Dict[str, Any]] = None) -> Document:
+    """Read a PDF, grouping lines into paragraphs and detecting simple headings."""
+    import pypdf
+    doc = Document()
+    with open(path, 'rb') as f:
+        reader = pypdf.PdfReader(f)
+        meta = reader.metadata
+        if meta:
+            for key, tag in (('title', '/Title'), ('author', '/Author'), ('subject', '/Subject')):
+                val = meta.get(tag)
+                if val and str(val).strip():
+                    doc.metadata[key] = str(val).strip()
+        for page in reader.pages:
+            _pdf_page_to_blocks(page.extract_text() or '', doc)
+    return doc
+
+
+def _pdf_is_heading(line: str) -> bool:
+    if len(line) >= 60:
+        return False
+    if re.match(r'^(chapter|part)\s+(\d+|[ivxlcdm]+)\b', line, re.I):
+        return True
+    letters = [c for c in line if c.isalpha()]
+    return bool(letters) and all(c.isupper() for c in letters)
+
+
+def _pdf_page_to_blocks(text: str, doc: Document) -> None:
+    """Split extracted page text into paragraphs, treating short caps/chapter
+    lines as h1 headings."""
+    para: list = []
+
+    def flush():
+        if para:
+            doc.add_paragraph(' '.join(para).strip())
+            para.clear()
+
+    for raw in text.split('\n'):
+        line = raw.strip()
+        if not line:
+            flush()
+        elif _pdf_is_heading(line):
+            flush()
+            doc.add_heading(line, 1)
+        else:
+            para.append(line)
+    flush()
 
 
 def _paragraph_runs(el):
