@@ -276,3 +276,30 @@ def test_txt_metadata_survives_conversions():
             opf = z.read(name).decode('utf-8', 'ignore')
         assert '<dc:title>My Title</dc:title>' in opf
         assert '<dc:creator>Jane Doe</dc:creator>' in opf
+
+
+# ── P0.8 — a docx paragraph's runs stay in one paragraph (not one <p> each) ────
+
+def test_docx_runs_grouped_into_single_paragraph():
+    import docx as pydocx
+    from convertext.converters.documents.docx import DocxConverter
+    from convertext.converters.ebooks.mobi import _doc_to_html
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / 'in.docx'
+        pd = pydocx.Document()
+        para = pd.add_paragraph()
+        para.add_run('The word ')
+        para.add_run('bold').bold = True
+        para.add_run(' is emphasized.')
+        pd.save(str(path))
+
+        doc = DocxConverter()._read_docx(path, {})
+        paras = [b for b in doc.content if b['type'] == 'paragraph']
+        assert not [b for b in doc.content if b['type'] == 'run']  # no standalone runs
+        assert len(paras) == 1
+        assert paras[0]['data'] == 'The word bold is emphasized.'
+        assert 'runs' in paras[0]
+
+        html, _ = _doc_to_html(doc)
+        assert '<p>The word bold is emphasized.</p>' in html
+        assert html.count('<p>') == 1  # one paragraph, not three

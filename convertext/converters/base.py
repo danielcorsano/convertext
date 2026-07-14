@@ -28,9 +28,16 @@ class Document:
         self.images[name] = {"data": data, "format": format}
         self.content.append({"type": "image", "name": name})
 
-    def add_paragraph(self, text: str):
-        """Add paragraph."""
-        self.content.append({"type": "paragraph", "data": text})
+    def add_paragraph(self, text: str, runs: Optional[List[Dict[str, Any]]] = None):
+        """Add paragraph, optionally carrying inline formatting runs.
+
+        `data` is the full plain text (used by plain writers); `runs`, when
+        present, lets rich writers emit inline bold/italic spans.
+        """
+        block = {"type": "paragraph", "data": text}
+        if runs:
+            block["runs"] = runs
+        self.content.append(block)
 
     def add_run(
         self,

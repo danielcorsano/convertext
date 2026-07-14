@@ -67,22 +67,26 @@ class DocxConverter(BaseConverter):
                     ]):
                         doc.add_paragraph(para.text.strip())
                     else:
+                        # Group the paragraph's runs into ONE paragraph block so a
+                        # formatted word does not become its own paragraph downstream.
+                        runs = []
                         for run in para.runs:
-                            if run.text.strip():
-                                color = None
-                                if run.font.color and run.font.color.rgb:
-                                    rgb = run.font.color.rgb
-                                    color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-
-                                doc.add_run(
-                                    text=run.text,
-                                    bold=run.bold or False,
-                                    italic=run.italic or False,
-                                    underline=run.underline or False,
-                                    color=color,
-                                    font_name=run.font.name,
-                                    font_size=int(run.font.size.pt) if run.font.size else None
-                                )
+                            if not run.text:
+                                continue
+                            color = None
+                            if run.font.color and run.font.color.rgb:
+                                rgb = run.font.color.rgb
+                                color = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+                            runs.append({
+                                'text': run.text,
+                                'bold': run.bold or False,
+                                'italic': run.italic or False,
+                                'underline': run.underline or False,
+                                'color': color,
+                                'font': run.font.name,
+                                'size': int(run.font.size.pt) if run.font.size else None,
+                            })
+                        doc.add_paragraph(para.text.strip(), runs=runs)
 
         for table in docx_doc.tables:
             rows = []
