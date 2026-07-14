@@ -9,18 +9,14 @@ from typing import Any, Dict, List
 
 from convertext.converters.base import BaseConverter, Document
 from convertext.converters.readers import read_txt, read_html, read_markdown
+from convertext.converters.ebooks.palmdoc import (
+    palmdoc_compress as _palmdoc_compress, FLIS as _FLIS, EOF as _EOF,
+)
 from convertext.converters.ebooks.azw3 import (
     _prepare_cover_records, _build_ncx_indx,
 )
 
 _PALM_EPOCH = 2082844800  # seconds from 1904-01-01 to Unix epoch (1970-01-01)
-
-_FLIS = (b'FLIS\x00\x00\x00\x08\x00\x41\x00\x00\x00\x00\x00\x00'
-         b'\xff\xff\xff\xff\x00\x01\x00\x03\x00\x00\x00\x03'
-         b'\x00\x00\x00\x01\xff\xff\xff\xff')
-
-_EOF = b'\xe9\x8e\x0d\x0a'
-
 
 def _build_fcis(text_length: int) -> bytes:
     """Build FCIS record."""
@@ -29,7 +25,6 @@ def _build_fcis(text_length: int) -> bytes:
             + struct.pack('>I', text_length)
             + b'\x00\x00\x00\x00\x00\x00\x00\x20'
             b'\x00\x00\x00\x08\x00\x01\x00\x01\x00\x00\x00\x00')
-
 
 class ToMobiConverter(BaseConverter):
     """Convert documents to MOBI v6 format for Kindle."""
@@ -59,7 +54,6 @@ class ToMobiConverter(BaseConverter):
             from convertext.converters.ebooks.epub import EpubConverter
             return EpubConverter()._read_epub(path, config)
         raise ValueError(f"Unsupported source format: {fmt}")
-
 
 # ── MOBI v6 binary building ───────────────────────────────────────────────────
 
@@ -97,48 +91,6 @@ def _doc_to_html(doc: Document) -> tuple:
         entry['length'] = next_off - entry['offset']
     return html_str, toc_entries
 
-
-def _palmdoc_compress(data: bytes) -> bytes:
-    """Compress bytes using PalmDOC LZ77 algorithm."""
-    result = bytearray()
-    i = 0
-    while i < len(data):
-        best_len = 0
-        best_dist = 0
-        if i >= 3:
-            max_dist = min(2047, i, 256)
-            for dist in range(1, max_dist + 1):
-                pos = i - dist
-                match_len = 0
-                while (match_len < 10 and
-                       i + match_len < len(data) and
-                       data[pos + match_len] == data[i + match_len]):
-                    match_len += 1
-                    if pos + match_len >= i:
-                        break
-                if match_len >= 3 and match_len > best_len:
-                    best_len = match_len
-                    best_dist = dist
-                    if best_len == 10:
-                        break
-        if best_len >= 3:
-            code = 0x8000 | (best_dist << 3) | (best_len - 3)
-            result.extend(struct.pack('>H', code))
-            i += best_len
-        elif 0x09 <= data[i] <= 0x7F:
-            result.append(data[i])
-            i += 1
-        else:
-            end = i + 1
-            while end < len(data) and end - i < 8 and not (0x09 <= data[end] <= 0x7F):
-                end += 1
-            count = end - i
-            result.append(count)
-            result.extend(data[i:end])
-            i = end
-    return bytes(result)
-
-
 def _build_exth(title: str, author: str, language: str = 'en',
                 metadata: dict = None, cover_offset: int = -1,
                 thumb_offset: int = -1, num_images: int = 0) -> bytes:
@@ -174,7 +126,6 @@ def _build_exth(title: str, author: str, language: str = 'en',
             + data
             + b'\x00' * padding)
 
-
 def _mobi_record_layout(num_text, num_images, ncx_count):
     """Compute all record indices for MOBI v6 file layout."""
     i = num_text + 1
@@ -189,7 +140,6 @@ def _mobi_record_layout(num_text, num_images, ncx_count):
         'first_image': first_image, 'ncx_idx': ncx_idx,
         'flis_idx': flis_idx, 'fcis_idx': fcis_idx, 'total': total,
     }
-
 
 def _build_record0(doc: Document, text_length: int, num_text_records: int,
                     flis_idx: int, fcis_idx: int, exth: bytes,
@@ -255,7 +205,6 @@ def _build_record0(doc: Document, text_length: int, num_text_records: int,
     pad = (4 - (len(record0) % 4)) % 4
     return record0 + b'\x00' * pad
 
-
 def _write_palmdb(path: Path, all_records: List[bytes], title: str) -> bool:
     """Write PalmDB container with all records."""
     n = len(all_records)
@@ -292,7 +241,6 @@ def _write_palmdb(path: Path, all_records: List[bytes], title: str) -> bool:
             f.write(rec)
 
     return True
-
 
 def _write_mobi(doc: Document, path: Path) -> bool:
     """Orchestrate MOBI v6 file creation from a Document."""
