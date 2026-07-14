@@ -9,8 +9,8 @@ try:
 except ImportError:
     RTF_AVAILABLE = False
 
+from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
-
 
 class RtfConverter(BaseConverter):
     """RTF format converter (requires striprtf extra)."""
@@ -85,12 +85,12 @@ class RtfConverter(BaseConverter):
 
         for block in doc.content:
             if block['type'] == 'paragraph':
-                html_parts.append(f"<p>{self._escape_html(block['data'])}</p>")
+                html_parts.append(f"<p>{escape_html(block['data'])}</p>")
             elif block['type'] == 'heading':
                 level = block['level']
-                html_parts.append(f"<h{level}>{self._escape_html(block['data'])}</h{level}>")
+                html_parts.append(f"<h{level}>{escape_html(block['data'])}</h{level}>")
             elif block['type'] == 'text':
-                html_parts.append(f"<p>{self._escape_html(block['data'])}</p>")
+                html_parts.append(f"<p>{escape_html(block['data'])}</p>")
 
         html_parts.append('</body>')
         html_parts.append('</html>')
@@ -112,11 +112,3 @@ class RtfConverter(BaseConverter):
                     f.write(block['data'] + '\n\n')
         return True
 
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
-        return (text
-                .replace('&', '&amp;')
-                .replace('<', '&lt;')
-                .replace('>', '&gt;')
-                .replace('"', '&quot;')
-                .replace("'", '&#39;'))

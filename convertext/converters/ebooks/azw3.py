@@ -9,6 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List
 
+from convertext.converters.readers import read_html, read_markdown, read_txt
 from convertext.converters.base import BaseConverter, Document
 
 _FLIS = (b'FLIS\x00\x00\x00\x08\x00\x41\x00\x00\x00\x00\x00\x00'
@@ -18,7 +19,6 @@ _FLIS = (b'FLIS\x00\x00\x00\x08\x00\x41\x00\x00\x00\x00\x00\x00'
 _EOF = b'\xe9\x8e\x0d\x0a'
 
 ChunkInfo = namedtuple('ChunkInfo', 'pre_start pre_length insert_offset content_start content_length')
-
 
 class Azw3Converter(BaseConverter):
     """Read AZW3/AZW/MOBI files - native PDB/MOBI parser."""
@@ -248,7 +248,6 @@ class Azw3Converter(BaseConverter):
                     f.write('#' * (block['level'] + 1) + ' ' + block['data'] + '\n\n')
         return True
 
-
 class ToAzw3Converter(BaseConverter):
     """Convert to KF8/AZW3 format for Kindle."""
 
@@ -264,11 +263,11 @@ class ToAzw3Converter(BaseConverter):
         source_fmt = source_path.suffix.lstrip('.').lower()
 
         if source_fmt == 'txt':
-            doc = self._read_txt(source_path, config)
+            doc = read_txt(source_path, config)
         elif source_fmt in ['html', 'htm']:
-            doc = self._read_html(source_path, config)
+            doc = read_html(source_path, config)
         elif source_fmt in ['md', 'markdown']:
-            doc = self._read_markdown(source_path, config)
+            doc = read_markdown(source_path, config)
         elif source_fmt == 'epub':
             from convertext.converters.ebooks.epub import EpubConverter
             doc = EpubConverter()._read_epub(source_path, config)
@@ -277,82 +276,6 @@ class ToAzw3Converter(BaseConverter):
         self._apply_metadata_overrides(doc, source_path, config)
 
         return self._create_kf8(doc, target_path, target_path.stem)
-
-    def _read_txt(self, path: Path, config: Dict[str, Any]) -> Document:
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-
-        lines = content.split('\n')
-        i = 0
-
-        if len(lines) >= 2 and lines[1].strip() and all(c == '=' for c in lines[1].strip()):
-            doc.metadata['title'] = lines[0].strip()
-            i = 2
-            if i < len(lines) and lines[i].startswith('By:'):
-                doc.metadata['author'] = lines[i][3:].strip()
-                i += 1
-            while i < len(lines) and not lines[i].strip():
-                i += 1
-
-        remaining = '\n'.join(lines[i:])
-        for para in remaining.split('\n\n'):
-            if para.strip():
-                doc.add_paragraph(para.strip())
-
-        return doc
-
-    def _read_html(self, path: Path, config: Dict[str, Any]) -> Document:
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(content, 'html.parser')
-
-        title_tag = soup.find('title')
-        if title_tag and title_tag.get_text().strip():
-            doc.metadata['title'] = title_tag.get_text().strip()
-        else:
-            h1_tag = soup.find('h1')
-            if h1_tag and h1_tag.get_text().strip():
-                doc.metadata['title'] = h1_tag.get_text().strip()
-
-        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            if element.name.startswith('h'):
-                level = int(element.name[1])
-                doc.add_heading(element.get_text().strip(), level)
-            elif element.name == 'p':
-                text = element.get_text().strip()
-                if text:
-                    doc.add_paragraph(text)
-
-        return doc
-
-    def _read_markdown(self, path: Path, config: Dict[str, Any]) -> Document:
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-
-        import markdown
-        from bs4 import BeautifulSoup
-        html_content = markdown.markdown(content)
-        soup = BeautifulSoup(html_content, 'html.parser')
-
-        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            if element.name.startswith('h'):
-                level = int(element.name[1])
-                doc.add_heading(element.get_text(), level)
-            elif element.name == 'p':
-                doc.add_paragraph(element.get_text())
-
-        return doc
 
     def _create_kf8(self, doc: Document, path: Path, default_title: str) -> bool:
         """Create KF8/AZW3 file with proper skeleton/chunk INDX records."""
@@ -425,12 +348,10 @@ class ToAzw3Converter(BaseConverter):
     def _palmdoc_compress(self, data: bytes) -> bytes:
         return _palmdoc_compress(data)
 
-
 # --- KF8 helper functions ---
 
 def _esc(text: str) -> str:
     return _html.escape(text, quote=True)
-
 
 def _encint(value: int) -> bytes:
     """Encode integer as forward VWI (variable width integer). Last byte has bit 7 set."""
@@ -444,7 +365,6 @@ def _encint(value: int) -> bytes:
     byts.reverse()
     return bytes(byts)
 
-
 def _to_base32(i: int) -> str:
     """Convert integer to 4-digit uppercase base-32 string."""
     digits = "0123456789ABCDEFGHIJKLMNOPQRSTUV"
@@ -457,13 +377,11 @@ def _to_base32(i: int) -> str:
         n //= 32
     return ''.join(reversed(result)).rjust(4, '0')
 
-
 def _align4(data: bytes) -> bytes:
     extra = len(data) % 4
     if extra == 0:
         return data
     return data + b'\x00' * (4 - extra)
-
 
 def _prepare_cover_records(doc: Document) -> tuple:
     """Prepare cover and thumbnail JPEG records from doc.images['cover'].
@@ -491,7 +409,6 @@ def _prepare_cover_records(doc: Document) -> tuple:
     except Exception:
         return ([], -1, -1)
 
-
 def _split_text_records(text_data: bytes) -> list:
     """Split text into 4096-byte records at UTF-8 character boundaries."""
     records = []
@@ -504,7 +421,6 @@ def _split_text_records(text_data: bytes) -> list:
         records.append(text_data[i:end])
         i = end
     return records if records else [b'']
-
 
 def _build_kf8_content(doc: Document, title: str):
     """Build KF8 text stream with skeleton/chunk structure.
@@ -574,7 +490,6 @@ def _build_kf8_content(doc: Document, title: str):
 
     return b''.join(text_parts), chunk_infos, toc_entries
 
-
 def _build_tagx(tags: list, control_byte_count: int = 1) -> bytes:
     """Build TAGX block. tags: list of (tag_number, values_per_entry, bitmask, end_flag)."""
     tag_data = b''
@@ -582,7 +497,6 @@ def _build_tagx(tags: list, control_byte_count: int = 1) -> bytes:
         tag_data += struct.pack('BBBB', tag, vpe, mask, end)
     length = 12 + len(tag_data)
     return b'TAGX' + struct.pack('>II', length, control_byte_count) + tag_data
-
 
 def _build_indx_header(tagx: bytes, last_key: str, entry_count: int,
                         total_entries: int, num_cncx: int = 0) -> bytes:
@@ -616,7 +530,6 @@ def _build_indx_header(tagx: bytes, last_key: str, entry_count: int,
 
     return bytes(header) + tagx_aligned + geo_aligned + idxt
 
-
 def _build_indx_data(entries: list) -> bytes:
     """Build INDX data record (192-byte header + entries + IDXT)."""
     header = bytearray(192)
@@ -643,7 +556,6 @@ def _build_indx_data(entries: list) -> bytes:
 
     return bytes(header) + entry_aligned + idxt
 
-
 def _build_cncx(strings: list):
     """Build CNCX record. Returns (record_bytes, list_of_offsets)."""
     data = bytearray()
@@ -654,7 +566,6 @@ def _build_cncx(strings: list):
         data += _encint(len(encoded))
         data += encoded
     return _align4(bytes(data)), offsets
-
 
 def _build_skel_indx(chunk_infos: list) -> list:
     """Build skeleton INDX records: [header_record, data_record]."""
@@ -677,7 +588,6 @@ def _build_skel_indx(chunk_infos: list) -> list:
     header_rec = _build_indx_header(tagx, last_key, len(entries), len(entries), num_cncx=0)
     data_rec = _build_indx_data(entries)
     return [header_rec, data_rec]
-
 
 def _build_chunk_indx(chunk_infos: list, text_length: int) -> list:
     """Build chunk INDX records: [header_record, data_record, cncx_record]."""
@@ -707,11 +617,9 @@ def _build_chunk_indx(chunk_infos: list, text_length: int) -> list:
     data_rec = _build_indx_data(entries)
     return [header_rec, data_rec, cncx_rec]
 
-
 def _build_fdst(text_length: int) -> bytes:
     """Build FDST record with single flow entry."""
     return b'FDST' + struct.pack('>III', 12, 1, 0) + struct.pack('>I', text_length)
-
 
 def _build_fcis_kf8(text_length: int) -> bytes:
     """Build FCIS record for KF8 (52 bytes, matching Calibre's output exactly)."""
@@ -721,7 +629,6 @@ def _build_fcis_kf8(text_length: int) -> bytes:
             + b'\x00\x00\x00\x00\x00\x00\x00\x28'
             b'\x00\x00\x00\x00\x00\x00\x00\x28'
             b'\x00\x00\x00\x08\x00\x01\x00\x01\x00\x00\x00\x00')
-
 
 def _kf8_record_layout(num_text, num_images, ncx_count, guide_count):
     """Compute all record indices for KF8 file layout."""
@@ -745,7 +652,6 @@ def _kf8_record_layout(num_text, num_images, ncx_count, guide_count):
         'fdst_idx': fdst_idx, 'flis_idx': flis_idx, 'fcis_idx': fcis_idx,
         'total': total,
     }
-
 
 def _build_ncx_indx(toc_entries: list) -> list:
     """Build NCX INDX records for Kindle chapter navigation.
@@ -783,7 +689,6 @@ def _build_ncx_indx(toc_entries: list) -> list:
     data_rec = _build_indx_data(entries)
     return [header_rec, data_rec, cncx_rec]
 
-
 def _build_guide_indx(text_start_offset: int) -> list:
     """Build guide INDX with 'text' entry pointing to start of content."""
     guide_tags = [(1, 1, 1, 0), (0, 0, 0, 1)]
@@ -796,7 +701,6 @@ def _build_guide_indx(text_start_offset: int) -> list:
     header_rec = _build_indx_header(tagx, key, 1, 1, num_cncx=0)
     data_rec = _build_indx_data([entry])
     return [header_rec, data_rec]
-
 
 def _write_palmdb_header(f, title: str, total_records: int, offsets: list):
     """Write 78-byte PalmDB header + record info list + 2-byte gap."""
@@ -816,7 +720,6 @@ def _write_palmdb_header(f, title: str, total_records: int, offsets: list):
         f.write(b'\x00' + struct.pack('>I', 2 * i)[1:])
 
     f.write(b'\x00\x00')
-
 
 def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
                          title: str, first_non_text: int, chunk_idx: int,
@@ -898,7 +801,6 @@ def _build_record0_kf8(text_length: int, num_text_records: int, exth: bytes,
 
     return bytes(h)
 
-
 def _build_exth(title: str, author: str, language: str = 'en',
                 metadata: dict = None, cover_offset: int = -1,
                 thumb_offset: int = -1, num_images: int = 0) -> bytes:
@@ -943,7 +845,6 @@ def _build_exth(title: str, author: str, language: str = 'en',
     result += b'\x00' * padding
 
     return result
-
 
 def _palmdoc_compress(data: bytes) -> bytes:
     """Compress data using PalmDOC LZ77 compression."""

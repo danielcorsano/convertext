@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from convertext.converters.base import BaseConverter, Document
+from convertext.converters.readers import read_txt, read_html, read_markdown
 from convertext.converters.ebooks.azw3 import (
     _prepare_cover_records, _build_ncx_indx,
 )
@@ -48,71 +49,16 @@ class ToMobiConverter(BaseConverter):
 
     def _read_source(self, path: Path, config: Dict[str, Any]) -> Document:
         fmt = path.suffix.lstrip('.').lower()
-        enc = config.get('documents', {}).get('encoding', 'utf-8')
         if fmt == 'txt':
-            return _read_txt(path, enc)
+            return read_txt(path, config)
         elif fmt in ('html', 'htm'):
-            return _read_html(path, enc)
+            return read_html(path, config)
         elif fmt in ('md', 'markdown'):
-            return _read_markdown(path, enc)
+            return read_markdown(path, config)
         elif fmt == 'epub':
             from convertext.converters.ebooks.epub import EpubConverter
             return EpubConverter()._read_epub(path, config)
         raise ValueError(f"Unsupported source format: {fmt}")
-
-
-# ── Document readers ──────────────────────────────────────────────────────────
-
-def _read_txt(path: Path, encoding: str) -> Document:
-    doc = Document()
-    with open(path, 'r', encoding=encoding) as f:
-        content = f.read()
-    lines = content.split('\n')
-    i = 0
-    if len(lines) >= 2 and lines[1].strip() and all(c == '=' for c in lines[1].strip()):
-        doc.metadata['title'] = lines[0].strip()
-        i = 2
-        if i < len(lines) and lines[i].startswith('By:'):
-            doc.metadata['author'] = lines[i][3:].strip()
-            i += 1
-        while i < len(lines) and not lines[i].strip():
-            i += 1
-    for para in '\n'.join(lines[i:]).split('\n\n'):
-        if para.strip():
-            doc.add_paragraph(para.strip())
-    return doc
-
-
-def _read_html(path: Path, encoding: str) -> Document:
-    from bs4 import BeautifulSoup
-    doc = Document()
-    with open(path, 'r', encoding=encoding) as f:
-        content = f.read()
-    soup = BeautifulSoup(content, 'html.parser')
-    t = soup.find('title')
-    if t and t.get_text().strip():
-        doc.metadata['title'] = t.get_text().strip()
-    for el in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-        if el.name.startswith('h'):
-            doc.add_heading(el.get_text().strip(), int(el.name[1]))
-        elif el.name == 'p' and el.get_text().strip():
-            doc.add_paragraph(el.get_text().strip())
-    return doc
-
-
-def _read_markdown(path: Path, encoding: str) -> Document:
-    import markdown
-    from bs4 import BeautifulSoup
-    doc = Document()
-    with open(path, 'r', encoding=encoding) as f:
-        content = f.read()
-    soup = BeautifulSoup(markdown.markdown(content), 'html.parser')
-    for el in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-        if el.name.startswith('h'):
-            doc.add_heading(el.get_text().strip(), int(el.name[1]))
-        elif el.name == 'p' and el.get_text().strip():
-            doc.add_paragraph(el.get_text().strip())
-    return doc
 
 
 # ── MOBI v6 binary building ───────────────────────────────────────────────────

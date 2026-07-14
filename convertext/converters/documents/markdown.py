@@ -3,11 +3,9 @@
 from pathlib import Path
 from typing import Any, Dict, List
 
-import markdown
-from bs4 import BeautifulSoup
-
+from convertext.converters.readers import read_markdown
+from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
-
 
 class MarkdownConverter(BaseConverter):
     """Markdown format converter."""
@@ -22,7 +20,7 @@ class MarkdownConverter(BaseConverter):
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert Markdown to target format."""
-        doc = self._read_markdown(source_path, config)
+        doc = read_markdown(source_path, config)
         self._apply_metadata_overrides(doc, source_path, config)
 
         target_fmt = target_path.suffix.lstrip('.').lower()
@@ -32,26 +30,6 @@ class MarkdownConverter(BaseConverter):
             return self._write_txt(doc, target_path)
 
         return False
-
-    def _read_markdown(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read Markdown into Document."""
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-
-        html_content = markdown.markdown(content)
-        soup = BeautifulSoup(html_content, 'html.parser')
-
-        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            if element.name.startswith('h'):
-                level = int(element.name[1])
-                doc.add_heading(element.get_text(), level)
-            elif element.name == 'p':
-                doc.add_paragraph(element.get_text())
-
-        return doc
 
     def _write_html(self, doc: Document, path: Path) -> bool:
         """Write Document to HTML."""
@@ -67,10 +45,10 @@ class MarkdownConverter(BaseConverter):
 
         for block in doc.content:
             if block['type'] == 'paragraph':
-                html_parts.append(f"<p>{self._escape_html(block['data'])}</p>")
+                html_parts.append(f"<p>{escape_html(block['data'])}</p>")
             elif block['type'] == 'heading':
                 level = block['level']
-                html_parts.append(f"<h{level}>{self._escape_html(block['data'])}</h{level}>")
+                html_parts.append(f"<h{level}>{escape_html(block['data'])}</h{level}>")
 
         html_parts.append('</body>')
         html_parts.append('</html>')
@@ -91,11 +69,3 @@ class MarkdownConverter(BaseConverter):
                     f.write('=' * len(block['data']) + '\n\n')
         return True
 
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
-        return (text
-                .replace('&', '&amp;')
-                .replace('<', '&lt;')
-                .replace('>', '&gt;')
-                .replace('"', '&quot;')
-                .replace("'", '&#39;'))

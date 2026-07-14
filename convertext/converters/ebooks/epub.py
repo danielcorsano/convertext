@@ -7,8 +7,9 @@ import zipfile
 from lxml import etree
 from bs4 import BeautifulSoup
 
+from convertext.converters.readers import read_html, read_markdown, read_txt
+from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
-
 
 class EpubConverter(BaseConverter):
     """Lightweight EPUB format converter (native Python)."""
@@ -153,7 +154,7 @@ class EpubConverter(BaseConverter):
         ]
 
         if doc.metadata.get('title'):
-            html_parts.append(f"<title>{self._escape_html(doc.metadata['title'])}</title>")
+            html_parts.append(f"<title>{escape_html(doc.metadata['title'])}</title>")
         else:
             html_parts.append('<title>Document</title>')
 
@@ -161,16 +162,16 @@ class EpubConverter(BaseConverter):
         html_parts.append('<body>')
 
         if doc.metadata.get('title'):
-            html_parts.append(f"<h1>{self._escape_html(doc.metadata['title'])}</h1>")
+            html_parts.append(f"<h1>{escape_html(doc.metadata['title'])}</h1>")
         if doc.metadata.get('author'):
-            html_parts.append(f"<p><em>By {self._escape_html(doc.metadata['author'])}</em></p>")
+            html_parts.append(f"<p><em>By {escape_html(doc.metadata['author'])}</em></p>")
 
         for block in doc.content:
             if block['type'] == 'paragraph':
-                html_parts.append(f"<p>{self._escape_html(block['data'])}</p>")
+                html_parts.append(f"<p>{escape_html(block['data'])}</p>")
             elif block['type'] == 'heading':
                 level = block['level']
-                html_parts.append(f"<h{level}>{self._escape_html(block['data'])}</h{level}>")
+                html_parts.append(f"<h{level}>{escape_html(block['data'])}</h{level}>")
 
         html_parts.append('</body>')
         html_parts.append('</html>')
@@ -195,16 +196,6 @@ class EpubConverter(BaseConverter):
                     f.write('#' * (block['level'] + 1) + ' ' + block['data'] + '\n\n')
         return True
 
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
-        return (text
-                .replace('&', '&amp;')
-                .replace('<', '&lt;')
-                .replace('>', '&gt;')
-                .replace('"', '&quot;')
-                .replace("'", '&#39;'))
-
-
 class ToEpubConverter(BaseConverter):
     """Convert various formats to EPUB."""
 
@@ -221,79 +212,16 @@ class ToEpubConverter(BaseConverter):
         source_fmt = source_path.suffix.lstrip('.').lower()
 
         if source_fmt == 'txt':
-            doc = self._read_txt(source_path, config)
+            doc = read_txt(source_path, config)
         elif source_fmt in ['html', 'htm']:
-            doc = self._read_html(source_path, config)
+            doc = read_html(source_path, config)
         elif source_fmt in ['md', 'markdown']:
-            doc = self._read_markdown(source_path, config)
+            doc = read_markdown(source_path, config)
         else:
             return False
         self._apply_metadata_overrides(doc, source_path, config)
 
         return self._create_epub(doc, target_path, config, target_path.stem)
-
-    def _read_txt(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read plain text into Document."""
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-            for para in content.split('\n\n'):
-                if para.strip():
-                    doc.add_paragraph(para.strip())
-
-        return doc
-
-    def _read_html(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read HTML into Document."""
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-
-        soup = BeautifulSoup(content, 'html.parser')
-
-        title_tag = soup.find('title')
-        if title_tag and title_tag.get_text().strip():
-            doc.metadata['title'] = title_tag.get_text().strip()
-        else:
-            h1_tag = soup.find('h1')
-            if h1_tag and h1_tag.get_text().strip():
-                doc.metadata['title'] = h1_tag.get_text().strip()
-
-        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            if element.name.startswith('h'):
-                level = int(element.name[1])
-                doc.add_heading(element.get_text().strip(), level)
-            elif element.name == 'p':
-                text = element.get_text().strip()
-                if text:
-                    doc.add_paragraph(text)
-
-        return doc
-
-    def _read_markdown(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read Markdown into Document."""
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-
-        import markdown
-        html_content = markdown.markdown(content)
-        soup = BeautifulSoup(html_content, 'html.parser')
-
-        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            if element.name.startswith('h'):
-                level = int(element.name[1])
-                doc.add_heading(element.get_text(), level)
-            elif element.name == 'p':
-                doc.add_paragraph(element.get_text())
-
-        return doc
 
     def _create_epub(self, doc: Document, path: Path, config: Dict[str, Any], default_title: str) -> bool:
         """Create EPUB from Document - native implementation."""
@@ -315,12 +243,12 @@ class ToEpubConverter(BaseConverter):
                     chapters.append(current_chapter)
                     current_chapter = []
                 chapter_titles.append(block['data'])
-                current_chapter.append(f'<h1>{self._escape_html(block["data"])}</h1>')
+                current_chapter.append(f'<h1>{escape_html(block["data"])}</h1>')
             elif block['type'] == 'paragraph':
-                current_chapter.append(f'<p>{self._escape_html(block["data"])}</p>')
+                current_chapter.append(f'<p>{escape_html(block["data"])}</p>')
             elif block['type'] == 'heading':
                 level = block['level']
-                current_chapter.append(f'<h{level}>{self._escape_html(block["data"])}</h{level}>')
+                current_chapter.append(f'<h{level}>{escape_html(block["data"])}</h{level}>')
 
         if current_chapter:
             chapters.append(current_chapter)
@@ -355,14 +283,14 @@ class ToEpubConverter(BaseConverter):
                 filename = f'chap_{i:02d}.xhtml'
                 manifest_items.append(f'    <item id="chapter{i}" href="{filename}" media-type="application/xhtml+xml"/>')
                 spine_items.append(f'    <itemref idref="chapter{i}"/>')
-                toc_items.append(f'    <navPoint id="navPoint-{i}" playOrder="{i}">\n      <navLabel><text>{self._escape_html(chapter_title)}</text></navLabel>\n      <content src="{filename}"/>\n    </navPoint>')
+                toc_items.append(f'    <navPoint id="navPoint-{i}" playOrder="{i}">\n      <navLabel><text>{escape_html(chapter_title)}</text></navLabel>\n      <content src="{filename}"/>\n    </navPoint>')
 
                 # Write chapter XHTML
                 xhtml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head>
-  <title>{self._escape_html(chapter_title)}</title>
+  <title>{escape_html(chapter_title)}</title>
 </head>
 <body>
 {''.join(chapter)}
@@ -375,8 +303,8 @@ class ToEpubConverter(BaseConverter):
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">{uid}</dc:identifier>
-    <dc:title>{self._escape_html(title)}</dc:title>
-    <dc:creator>{self._escape_html(author)}</dc:creator>
+    <dc:title>{escape_html(title)}</dc:title>
+    <dc:creator>{escape_html(author)}</dc:creator>
     <dc:language>{language}</dc:language>
     <meta property="dcterms:modified">{dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
   </metadata>
@@ -398,7 +326,7 @@ class ToEpubConverter(BaseConverter):
     <meta name="dtb:depth" content="1"/>
   </head>
   <docTitle>
-    <text>{self._escape_html(title)}</text>
+    <text>{escape_html(title)}</text>
   </docTitle>
   <navMap>
 {''.join([item + '\n' for item in toc_items])}
@@ -408,11 +336,3 @@ class ToEpubConverter(BaseConverter):
 
         return True
 
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
-        return (text
-                .replace('&', '&amp;')
-                .replace('<', '&lt;')
-                .replace('>', '&gt;')
-                .replace('"', '&quot;')
-                .replace("'", '&#39;'))

@@ -236,3 +236,43 @@ def test_fb2_and_odt_register_unconditionally():
     assert r.get_converter('fb2', 'txt') is not None
     assert r.get_converter('txt', 'fb2') is not None
     assert r.get_converter('odt', 'txt') is not None
+
+
+# ── P3.1 — shared readers; txt Title/By: header survives to every writer ──────
+
+def test_shared_read_txt_parses_header():
+    from convertext.converters.readers import read_txt
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / 'a.txt'
+        p.write_text('My Title\n========\nBy: Jane Doe\n\nBody paragraph.')
+        doc = read_txt(p, {})
+    assert doc.metadata.get('title') == 'My Title'
+    assert doc.metadata.get('author') == 'Jane Doe'
+    assert any(b.get('data') == 'Body paragraph.' for b in doc.content)
+
+
+def test_txt_metadata_survives_conversions():
+    import zipfile
+    from convertext.converters.readers import read_txt
+    from convertext.converters.documents.txt import TxtConverter
+    from convertext.converters.ebooks.epub import ToEpubConverter
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        src = p / 'a.txt'
+        src.write_text('My Title\n========\nBy: Jane Doe\n\nBody paragraph.')
+        for fmt in ('txt', 'html', 'md'):
+            out = p / f'out.{fmt}'
+            assert TxtConverter().convert(src, out, {}) is True
+            text = out.read_text()
+            assert 'My Title' in text and 'Jane Doe' in text
+        # round-trip: the txt writer's output must re-read with author intact
+        rt = read_txt(p / 'out.txt', {})
+        assert rt.metadata.get('author') == 'Jane Doe'
+        # txt -> epub previously lost title/author (the P3.1 drift); both now survive
+        epub = p / 'a.epub'
+        assert ToEpubConverter().convert(src, epub, {}) is True
+        with zipfile.ZipFile(epub) as z:
+            name = next(n for n in z.namelist() if n.endswith('.opf'))
+            opf = z.read(name).decode('utf-8', 'ignore')
+        assert '<dc:title>My Title</dc:title>' in opf
+        assert '<dc:creator>Jane Doe</dc:creator>' in opf

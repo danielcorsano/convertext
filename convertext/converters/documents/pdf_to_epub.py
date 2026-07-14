@@ -8,8 +8,8 @@ from typing import Any, Dict, List
 
 import pypdf
 
+from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
-
 
 class PdfToEpubConverter(BaseConverter):
     """Convert PDF directly to EPUB preserving structure and metadata."""
@@ -79,9 +79,9 @@ class PdfToEpubConverter(BaseConverter):
         for block in doc.content:
             if block['type'] == 'heading':
                 level = block['level']
-                content_html.append(f'<h{level}>{self._escape_html(block["data"])}</h{level}>')
+                content_html.append(f'<h{level}>{escape_html(block["data"])}</h{level}>')
             elif block['type'] in ['paragraph', 'text']:
-                content_html.append(f'<p>{self._escape_html(block["data"])}</p>')
+                content_html.append(f'<p>{escape_html(block["data"])}</p>')
 
         if not content_html:
             content_html = ['<p>No content</p>']
@@ -105,7 +105,7 @@ class PdfToEpubConverter(BaseConverter):
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head>
-  <title>{self._escape_html(title)}</title>
+  <title>{escape_html(title)}</title>
 </head>
 <body>
 {''.join(content_html)}
@@ -118,8 +118,8 @@ class PdfToEpubConverter(BaseConverter):
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">{uid}</dc:identifier>
-    <dc:title>{self._escape_html(title)}</dc:title>
-    <dc:creator>{self._escape_html(author)}</dc:creator>
+    <dc:title>{escape_html(title)}</dc:title>
+    <dc:creator>{escape_html(author)}</dc:creator>
     <dc:language>{language}</dc:language>
     <meta property="dcterms:modified">{dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
   </metadata>
@@ -141,11 +141,11 @@ class PdfToEpubConverter(BaseConverter):
     <meta name="dtb:depth" content="1"/>
   </head>
   <docTitle>
-    <text>{self._escape_html(title)}</text>
+    <text>{escape_html(title)}</text>
   </docTitle>
   <navMap>
     <navPoint id="navPoint-1" playOrder="1">
-      <navLabel><text>{self._escape_html(title)}</text></navLabel>
+      <navLabel><text>{escape_html(title)}</text></navLabel>
       <content src="chapter.xhtml"/>
     </navPoint>
   </navMap>
@@ -154,11 +154,3 @@ class PdfToEpubConverter(BaseConverter):
 
         return True
 
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
-        return (text
-                .replace('&', '&amp;')
-                .replace('<', '&lt;')
-                .replace('>', '&gt;')
-                .replace('"', '&quot;')
-                .replace("'", '&#39;'))

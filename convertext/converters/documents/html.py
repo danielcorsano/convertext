@@ -3,10 +3,8 @@
 from pathlib import Path
 from typing import Any, Dict, List
 
-from bs4 import BeautifulSoup
-
+from convertext.converters.readers import read_html
 from convertext.converters.base import BaseConverter, Document
-
 
 class HtmlConverter(BaseConverter):
     """HTML format converter."""
@@ -21,7 +19,7 @@ class HtmlConverter(BaseConverter):
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert HTML to target format."""
-        doc = self._read_html(source_path, config)
+        doc = read_html(source_path, config)
         self._apply_metadata_overrides(doc, source_path, config)
 
         target_fmt = target_path.suffix.lstrip('.').lower()
@@ -31,35 +29,6 @@ class HtmlConverter(BaseConverter):
             return self._write_md(doc, target_path)
 
         return False
-
-    def _read_html(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read HTML into Document."""
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-
-        soup = BeautifulSoup(content, 'html.parser')
-
-        title_tag = soup.find('title')
-        if title_tag and title_tag.get_text().strip():
-            doc.metadata['title'] = title_tag.get_text().strip()
-        else:
-            h1_tag = soup.find('h1')
-            if h1_tag and h1_tag.get_text().strip():
-                doc.metadata['title'] = h1_tag.get_text().strip()
-
-        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            if element.name.startswith('h'):
-                level = int(element.name[1])
-                doc.add_heading(element.get_text().strip(), level)
-            elif element.name == 'p':
-                text = element.get_text().strip()
-                if text:
-                    doc.add_paragraph(text)
-
-        return doc
 
     def _write_txt(self, doc: Document, path: Path) -> bool:
         """Write Document to plain text."""

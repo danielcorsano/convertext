@@ -5,8 +5,8 @@ from typing import Any, Dict, List
 
 import pypdf
 
+from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
-
 
 class PDFConverter(BaseConverter):
     """PDF format converter."""
@@ -75,7 +75,7 @@ class PDFConverter(BaseConverter):
         ]
 
         if doc.metadata.get('title'):
-            html_parts.append(f"<title>{self._escape_html(doc.metadata['title'])}</title>")
+            html_parts.append(f"<title>{escape_html(doc.metadata['title'])}</title>")
         else:
             html_parts.append('<title>Document</title>')
 
@@ -84,10 +84,10 @@ class PDFConverter(BaseConverter):
 
         for block in doc.content:
             if block['type'] == 'paragraph':
-                html_parts.append(f"<p>{self._escape_html(block['data'])}</p>")
+                html_parts.append(f"<p>{escape_html(block['data'])}</p>")
             elif block['type'] == 'heading':
                 level = block['level']
-                html_parts.append(f"<h{level}>{self._escape_html(block['data'])}</h{level}>")
+                html_parts.append(f"<h{level}>{escape_html(block['data'])}</h{level}>")
 
         html_parts.append('</body>')
         html_parts.append('</html>')
@@ -112,11 +112,3 @@ class PDFConverter(BaseConverter):
                     f.write('#' * block['level'] + ' ' + block['data'] + '\n\n')
         return True
 
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
-        return (text
-                .replace('&', '&amp;')
-                .replace('<', '&lt;')
-                .replace('>', '&gt;')
-                .replace('"', '&quot;')
-                .replace("'", '&#39;'))

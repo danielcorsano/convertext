@@ -21,9 +21,9 @@ from reportlab.platypus import (
 )
 from reportlab.lib import colors
 
+from convertext.converters.readers import read_html, read_txt
 from convertext.converters.base import BaseConverter, Document
 from convertext.converters.utils import escape_html, hex_to_rgb
-
 
 class ToPdfConverter(BaseConverter):
     """Convert various formats to PDF using ReportLab."""
@@ -42,11 +42,11 @@ class ToPdfConverter(BaseConverter):
 
         # If source is already HTML or TXT, read directly
         if source_fmt in ['html', 'htm']:
-            doc = self._read_html(source_path, config)
+            doc = read_html(source_path, config)
             self._apply_metadata_overrides(doc, source_path, config)
             return self._create_pdf(doc, target_path, config)
         elif source_fmt == 'txt':
-            doc = self._read_txt(source_path, config)
+            doc = read_txt(source_path, config)
             self._apply_metadata_overrides(doc, source_path, config)
             return self._create_pdf(doc, target_path, config)
 
@@ -71,82 +71,15 @@ class ToPdfConverter(BaseConverter):
                 return False
 
             if inter_fmt == 'html':
-                doc = self._read_html(tmp_path, config)
+                doc = read_html(tmp_path, config)
             else:
-                doc = self._read_txt(tmp_path, config)
+                doc = read_txt(tmp_path, config)
             self._apply_metadata_overrides(doc, source_path, config)
 
             return self._create_pdf(doc, target_path, config)
         finally:
             if tmp_path.exists():
                 tmp_path.unlink()
-
-    def _read_txt(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read plain text into Document."""
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-            for para in content.split('\n\n'):
-                if para.strip():
-                    doc.add_paragraph(para.strip())
-
-        return doc
-
-    def _read_html(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read HTML into Document."""
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-
-        from bs4 import BeautifulSoup
-        soup = BeautifulSoup(content, 'html.parser')
-
-        title_tag = soup.find('title')
-        if title_tag and title_tag.get_text().strip():
-            doc.metadata['title'] = title_tag.get_text().strip()
-        else:
-            h1_tag = soup.find('h1')
-            if h1_tag and h1_tag.get_text().strip():
-                doc.metadata['title'] = h1_tag.get_text().strip()
-
-        for element in soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'ul', 'ol']):
-            if element.name.startswith('h'):
-                level = int(element.name[1])
-                doc.add_heading(element.get_text().strip(), level)
-
-            elif element.name == 'p':
-                text = element.get_text().strip()
-                if text:
-                    doc.add_paragraph(text)
-
-            elif element.name == 'table':
-                rows = []
-                headers = []
-                thead = element.find('thead')
-                if thead:
-                    header_row = thead.find('tr')
-                    if header_row:
-                        headers = [th.get_text().strip() for th in header_row.find_all(['th', 'td'])]
-
-                tbody = element.find('tbody') or element
-                for row in tbody.find_all('tr'):
-                    cells = [cell.get_text().strip() for cell in row.find_all(['td', 'th'])]
-                    if cells:
-                        rows.append(cells)
-
-                if rows:
-                    doc.add_table(rows=rows, headers=headers if headers else None)
-
-            elif element.name in ['ul', 'ol']:
-                items = [li.get_text().strip() for li in element.find_all('li')]
-                if items:
-                    doc.add_list(items=items, ordered=(element.name == 'ol'))
-
-        return doc
 
     def _create_pdf(self, doc: Document, path: Path, config: Dict[str, Any]) -> bool:
         """Create PDF using ReportLab."""

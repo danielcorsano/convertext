@@ -3,8 +3,9 @@
 from pathlib import Path
 from typing import Any, Dict, List
 
+from convertext.converters.readers import read_txt
+from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
-
 
 class TxtConverter(BaseConverter):
     """Plain text format converter."""
@@ -19,7 +20,7 @@ class TxtConverter(BaseConverter):
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert plain text to target format."""
-        doc = self._read_txt(source_path, config)
+        doc = read_txt(source_path, config)
         self._apply_metadata_overrides(doc, source_path, config)
 
         target_fmt = target_path.suffix.lstrip('.').lower()
@@ -32,22 +33,14 @@ class TxtConverter(BaseConverter):
 
         return False
 
-    def _read_txt(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read plain text into Document."""
-        doc = Document()
-        encoding = config.get('documents', {}).get('encoding', 'utf-8')
-
-        with open(path, 'r', encoding=encoding) as f:
-            content = f.read()
-            for para in content.split('\n\n'):
-                if para.strip():
-                    doc.add_paragraph(para.strip())
-
-        return doc
-
     def _write_txt(self, doc: Document, path: Path) -> bool:
         """Write Document to plain text."""
         with open(path, 'w', encoding='utf-8') as f:
+            if doc.metadata.get('title'):
+                f.write(doc.metadata['title'] + '\n')
+                f.write('=' * len(doc.metadata['title']) + '\n\n')
+            if doc.metadata.get('author'):
+                f.write(f"By: {doc.metadata['author']}\n\n")
             for block in doc.content:
                 if block['type'] in ['text', 'paragraph']:
                     f.write(block['data'] + '\n\n')
@@ -62,19 +55,26 @@ class TxtConverter(BaseConverter):
             '<html>',
             '<head>',
             '<meta charset="utf-8">',
-            '<title>Document</title>',
-            '</head>',
-            '<body>'
         ]
+        if doc.metadata.get('title'):
+            html_parts.append(f"<title>{escape_html(doc.metadata['title'])}</title>")
+        else:
+            html_parts.append('<title>Document</title>')
+        html_parts.append('</head>')
+        html_parts.append('<body>')
+        if doc.metadata.get('title'):
+            html_parts.append(f"<h1>{escape_html(doc.metadata['title'])}</h1>")
+        if doc.metadata.get('author'):
+            html_parts.append(f"<p><em>By {escape_html(doc.metadata['author'])}</em></p>")
 
         for block in doc.content:
             if block['type'] == 'paragraph':
-                html_parts.append(f"<p>{self._escape_html(block['data'])}</p>")
+                html_parts.append(f"<p>{escape_html(block['data'])}</p>")
             elif block['type'] == 'heading':
                 level = block['level']
-                html_parts.append(f"<h{level}>{self._escape_html(block['data'])}</h{level}>")
+                html_parts.append(f"<h{level}>{escape_html(block['data'])}</h{level}>")
             elif block['type'] == 'text':
-                html_parts.append(f"<p>{self._escape_html(block['data'])}</p>")
+                html_parts.append(f"<p>{escape_html(block['data'])}</p>")
 
         html_parts.append('</body>')
         html_parts.append('</html>')
@@ -87,6 +87,10 @@ class TxtConverter(BaseConverter):
     def _write_md(self, doc: Document, path: Path) -> bool:
         """Write Document to Markdown."""
         with open(path, 'w', encoding='utf-8') as f:
+            if doc.metadata.get('title'):
+                f.write(f"# {doc.metadata['title']}\n\n")
+            if doc.metadata.get('author'):
+                f.write(f"**Author:** {doc.metadata['author']}\n\n")
             for block in doc.content:
                 if block['type'] == 'paragraph':
                     f.write(block['data'] + '\n\n')
@@ -96,11 +100,3 @@ class TxtConverter(BaseConverter):
                     f.write(block['data'] + '\n\n')
         return True
 
-    def _escape_html(self, text: str) -> str:
-        """Escape HTML special characters."""
-        return (text
-                .replace('&', '&amp;')
-                .replace('<', '&lt;')
-                .replace('>', '&gt;')
-                .replace('"', '&quot;')
-                .replace("'", '&#39;'))
