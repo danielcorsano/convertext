@@ -375,7 +375,9 @@ def _prepare_cover_records(doc: Document) -> tuple:
         thumb_jpeg = buf.getvalue()
 
         return ([cover_jpeg, thumb_jpeg], 0, 1)
-    except Exception:
+    except Exception as e:
+        import warnings
+        warnings.warn(f"Cover image could not be processed; book will have no cover: {e}")
         return ([], -1, -1)
 
 def _split_text_records(text_data: bytes) -> list:

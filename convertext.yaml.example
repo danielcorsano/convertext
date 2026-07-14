@@ -18,3 +18,4 @@ output:
 # Document format settings
 documents:
   encoding: utf-8                   # Text file encoding
+  title_from_filename: false        # Use the filename (no extension) as the title

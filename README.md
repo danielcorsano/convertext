@@ -13,6 +13,9 @@ Convert between all major text, document and ebook extensions with a single term
 **Bidirectional (Read & Write):**
 PDF, DOCX, RTF, TXT, Markdown, HTML, EPUB, FB2
 
+**Kindle:**
+Write MOBI and AZW3/KF8 from TXT, HTML, Markdown, EPUB; read MOBI/AZW/AZW3 to TXT, HTML, Markdown
+
 **Read Only:**
 DOC, ODT
 
