@@ -8,6 +8,7 @@ from lxml import etree
 from bs4 import BeautifulSoup
 
 from convertext.converters.readers import read_html, read_markdown, read_txt
+from convertext.converters.ebooks.htmlbuild import block_to_html
 from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
 
@@ -238,17 +239,14 @@ class ToEpubConverter(BaseConverter):
         chapter_titles = []
 
         for block in doc.content:
-            if block['type'] == 'heading' and block['level'] == 1:
+            if block['type'] == 'heading' and block.get('level', 1) == 1:
                 if current_chapter:
                     chapters.append(current_chapter)
                     current_chapter = []
                 chapter_titles.append(block['data'])
-                current_chapter.append(f'<h1>{escape_html(block["data"])}</h1>')
-            elif block['type'] == 'paragraph':
-                current_chapter.append(f'<p>{escape_html(block["data"])}</p>')
-            elif block['type'] == 'heading':
-                level = block['level']
-                current_chapter.append(f'<h{level}>{escape_html(block["data"])}</h{level}>')
+            frag = block_to_html(block, escape=escape_html)
+            if frag:
+                current_chapter.append(frag)
 
         if current_chapter:
             chapters.append(current_chapter)

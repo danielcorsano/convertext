@@ -1,6 +1,5 @@
 """MOBI v6 write-only converter."""
 
-import html
 import random
 import struct
 import time
@@ -12,6 +11,7 @@ from convertext.converters.readers import read_txt, read_html, read_markdown
 from convertext.converters.ebooks.palmdoc import (
     palmdoc_compress as _palmdoc_compress, FLIS as _FLIS, EOF as _EOF,
 )
+from convertext.converters.ebooks.htmlbuild import block_to_html
 from convertext.converters.ebooks.azw3 import (
     _prepare_cover_records, _build_ncx_indx,
 )
@@ -63,25 +63,15 @@ def _doc_to_html(doc: Document) -> tuple:
     toc_entries = []
     first_h1 = True
     for block in doc.content:
-        btype = block.get('type')
-        if btype == 'heading':
-            level = block.get('level', 1)
-            text = html.escape(block.get('data', ''))
-            if level == 1:
-                if not first_h1:
-                    parts.append('<mbp:pagebreak/>')
-                offset = len('\n'.join(parts).encode('utf-8')) + 1  # +1 for upcoming \n
-                toc_entries.append({'label': block.get('data', ''), 'offset': offset})
-                first_h1 = False
-            parts.append(f'<h{level}>{text}</h{level}>')
-        elif btype in ('paragraph', 'text'):
-            text = html.escape(block.get('data', ''))
-            if text:
-                parts.append(f'<p>{text}</p>')
-        elif btype == 'run':
-            text = html.escape(block.get('text', ''))
-            if text:
-                parts.append(f'<p>{text}</p>')
+        if block.get('type') == 'heading' and block.get('level', 1) == 1:
+            if not first_h1:
+                parts.append('<mbp:pagebreak/>')
+            offset = len('\n'.join(parts).encode('utf-8')) + 1  # +1 for upcoming \n
+            toc_entries.append({'label': block.get('data', ''), 'offset': offset})
+            first_h1 = False
+        frag = block_to_html(block)
+        if frag:
+            parts.append(frag)
     parts.append('</body></html>')
     html_str = '\n'.join(parts)
     html_len = len(html_str.encode('utf-8'))

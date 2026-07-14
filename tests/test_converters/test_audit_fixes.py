@@ -301,5 +301,6 @@ def test_docx_runs_grouped_into_single_paragraph():
         assert 'runs' in paras[0]
 
         html, _ = _doc_to_html(doc)
-        assert '<p>The word bold is emphasized.</p>' in html
+        # one paragraph (P0.8), with the bold run rendered inline (P1.2)
+        assert '<p>The word <b>bold</b> is emphasized.</p>' in html
         assert html.count('<p>') == 1  # one paragraph, not three

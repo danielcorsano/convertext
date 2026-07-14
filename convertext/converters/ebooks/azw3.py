@@ -15,6 +15,7 @@ from convertext.converters.ebooks.palmdoc import (
     palmdoc_compress as _palmdoc_compress, palmdoc_decompress,
     FLIS as _FLIS, EOF as _EOF,
 )
+from convertext.converters.ebooks.htmlbuild import block_to_html
 
 ChunkInfo = namedtuple('ChunkInfo', 'pre_start pre_length insert_offset content_start content_length')
 
@@ -435,11 +436,9 @@ def _build_kf8_content(doc: Document, title: str):
 
         body_parts = []
         for block in blocks:
-            if block['type'] in ('paragraph', 'text'):
-                body_parts.append(f'<p>{_esc(block["data"])}</p>')
-            elif block['type'] == 'heading':
-                level = block['level']
-                body_parts.append(f'<h{level}>{_esc(block["data"])}</h{level}>')
+            frag = block_to_html(block)
+            if frag:
+                body_parts.append(frag)
         body = ''.join(body_parts).encode('utf-8')
 
         pre_start = offset
