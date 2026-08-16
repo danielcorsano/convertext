@@ -106,29 +106,51 @@ def _doc_to_html(doc: Document, img_ref=None) -> tuple:
     parts = [head]
     running = len(head.encode('utf-8'))  # bytes of '\n'.join(parts) so far
     headings = []
-    first_h1 = True
+    first_section = True
+
+    def emit_raw(frag):
+        """Append a fragment without claiming the queued anchors."""
+        nonlocal running
+        parts.append(frag)
+        running += 1 + len(frag.encode('utf-8'))
 
     def emit(frag):
         """Append a fragment, resolving any anchors queued for it."""
-        nonlocal running
         offset = running + 1  # +1 for the \n that '\n'.join inserts
         for key in pending_anchors:
             anchor_offsets.setdefault(key, offset)
         pending_anchors.clear()
-        parts.append(frag)
-        running += 1 + len(frag.encode('utf-8'))
+        emit_raw(frag)
         return offset
+
+    # Sections come from the source's own top-level TOC; h1 headings are the
+    # fallback for sources that carry no navigation (txt, md, standalone html).
+    sections = {_entry_key(e): (e.get('label') or '') for e in reversed(doc.toc)
+                if e.get('level', 0) == 0}
 
     for block in doc.content:
         pending_anchors.extend(block.get('anchors', ()))
-        if block.get('type') == 'heading' and block.get('level', 1) == 1:
-            if not first_h1:
-                emit('<mbp:pagebreak/>')
+        is_h1 = block.get('type') == 'heading' and block.get('level', 1) == 1
+        if is_h1 and not sections:
+            if not first_section:
+                emit_raw('<mbp:pagebreak/>')
+            first_section = False
             headings.append({'label': block.get('data', ''), 'offset': running + 1})
-            first_h1 = False
+
         frag = block_to_html(block, img_ref=img_ref, link_ref=link_ref)
-        if frag:
-            emit(frag)
+        if not frag:
+            continue
+
+        if sections:
+            label = next((sections[k] for k in pending_anchors if k in sections), None)
+            if label is not None:
+                if not first_section:
+                    emit_raw('<mbp:pagebreak/>')
+                first_section = False
+                # A chapter titled by an image or its own heading needs no synthetic one.
+                if block.get('type') not in ('heading', 'image'):
+                    emit(f'<h1>{_escape(label)}</h1>')
+        emit(frag)
 
     if toc_key == _GENERATED_TOC:
         pending_anchors.append(_GENERATED_TOC)
