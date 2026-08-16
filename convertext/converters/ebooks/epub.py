@@ -4,6 +4,7 @@ import datetime as dt
 import posixpath
 from pathlib import Path
 from typing import Any, Dict, List
+from urllib.parse import unquote
 import zipfile
 from lxml import etree
 from bs4 import BeautifulSoup
@@ -329,7 +330,12 @@ class ToEpubConverter(BaseConverter):
 _NCX_NS = {'n': 'http://www.daisy.org/z3986/2005/ncx/'}
 
 def _zpath(base: str, href: str) -> str:
-    """Resolve an href against a directory inside the zip."""
+    """Resolve an href against a directory inside the zip.
+
+    Hrefs in the OPF and NCX are URIs, so they are percent-encoded while the zip
+    entries are not; without unquoting, any path with a space never matches.
+    """
+    href = unquote(href)
     return posixpath.normpath(posixpath.join(base, href)) if base else href
 
 def _image_resolver(zf, doc_path: str):
@@ -376,7 +382,7 @@ def _read_toc(zf, opf, ns: dict, manifest: dict, base_dir: str) -> List[Dict[str
                     target, _, fragment = src.partition('#')
                     entries.append({'label': (label.text or '').strip(),
                                     'src': _zpath(ncx_dir, target),
-                                    'fragment': fragment, 'level': level})
+                                    'fragment': unquote(fragment), 'level': level})
                 walk(np, level + 1)
 
         if nav_map is not None:
@@ -401,7 +407,7 @@ def _read_toc(zf, opf, ns: dict, manifest: dict, base_dir: str) -> List[Dict[str
         for a in nav.find_all('a', href=True):
             target, _, fragment = a['href'].partition('#')
             entries.append({'label': a.get_text().strip(),
-                            'src': _zpath(nav_dir, target), 'fragment': fragment,
+                            'src': _zpath(nav_dir, target), 'fragment': unquote(fragment),
                             'level': max(len(a.find_parents('ol')) - 1, 0)})
         break
 

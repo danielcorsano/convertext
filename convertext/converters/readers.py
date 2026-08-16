@@ -10,6 +10,7 @@ import posixpath
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import unquote
 
 from convertext.converters.base import Document
 
@@ -177,6 +178,7 @@ def collect_blocks(soup, doc: Document, src: str = '', resolve_image=None) -> No
         """Rewrite a document-relative href to the same key space as ``anchors``."""
         if not href or '://' in href:
             return href
+        href = unquote(href)  # hrefs are URIs; the paths they name are not encoded
         if href.startswith('#'):
             return f'{src}{href}'
         target, _, fragment = href.partition('#')

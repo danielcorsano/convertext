@@ -62,11 +62,12 @@ class ToMobiConverter(BaseConverter):
 _PLACEHOLDER = 'filepos=0000000000'
 _GENERATED_TOC = '\x00generated-toc'
 
-def _toc_page_key(doc: Document):
+def _toc_page_key(doc: Document, available: set):
     """Key of the book's own contents page, or a marker to generate one."""
-    if not doc.toc:
+    reachable = [e for e in doc.toc if _entry_key(e) in available]
+    if not reachable:
         return None
-    for entry in doc.toc:
+    for entry in reachable:
         if re.fullmatch(r'\s*(table of )?contents\s*', entry.get('label') or '', re.I):
             return _entry_key(entry)
     return _GENERATED_TOC
@@ -88,14 +89,20 @@ def _doc_to_html(doc: Document, img_ref=None) -> tuple:
     anchor_offsets = {}
     pending_anchors = []
 
+    # Only link to targets that exist; anything else renders as plain text
+    # rather than a tappable link that goes nowhere on the device.
+    available = {a for block in doc.content for a in block.get('anchors', ())}
+
     def link_ref(href):
-        """Register an internal link target and return its placeholder."""
-        if not href or '://' in href:
+        """Register a reachable link target and return its placeholder."""
+        if href not in available:
             return None
         link_targets.append(href)
         return _PLACEHOLDER
 
-    toc_key = _toc_page_key(doc)
+    toc_key = _toc_page_key(doc, available)
+    if toc_key == _GENERATED_TOC:
+        available.add(_GENERATED_TOC)
     head = '<html><head>'
     if toc_key:
         link_targets.append(toc_key)

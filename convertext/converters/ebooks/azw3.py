@@ -497,7 +497,7 @@ def _build_indx_header(tagx: bytes, last_key: str, entry_count: int,
     header = bytearray(192)
     header[0:4] = b'INDX'
     struct.pack_into('>I', header, 4, 192)
-    struct.pack_into('>I', header, 8, 2)             # type = index header
+    struct.pack_into('>I', header, 16, 2)            # index header marker (Calibre puts it here)
     struct.pack_into('>I', header, 24, 1)            # num data records = 1
     struct.pack_into('>I', header, 28, 65001)        # UTF-8
     struct.pack_into('>I', header, 32, 0xFFFFFFFF)
