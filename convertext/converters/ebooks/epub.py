@@ -1,6 +1,7 @@
 """EPUB format converter - native Python implementation."""
 
 import datetime as dt
+import posixpath
 from pathlib import Path
 from typing import Any, Dict, List
 import zipfile
@@ -49,7 +50,7 @@ class EpubConverter(BaseConverter):
 
             # Parse OPF for metadata and spine
             opf = etree.fromstring(zf.read(opf_path))
-            opf_dir = str(Path(opf_path).parent)
+            base_dir = '' if str(Path(opf_path).parent) in ('', '.') else str(Path(opf_path).parent)
 
             # Extract metadata
             ns = {'opf': 'http://www.idpf.org/2007/opf', 'dc': 'http://purl.org/dc/elements/1.1/'}
@@ -89,9 +90,7 @@ class EpubConverter(BaseConverter):
                         cover_id = item.get('id')
                         break
             if cover_id and cover_id in manifest:
-                cover_href = manifest[cover_id]
-                if opf_dir and opf_dir != '.':
-                    cover_href = f"{opf_dir}/{cover_href}"
+                cover_href = _zpath(base_dir, manifest[cover_id])
                 try:
                     cover_data = zf.read(cover_href)
                     fmt = manifest_types.get(cover_id, '').split('/')[-1].replace('jpeg', 'jpg')
@@ -99,20 +98,21 @@ class EpubConverter(BaseConverter):
                 except Exception:
                     pass
 
+            doc.toc = _read_toc(zf, opf, ns, manifest, base_dir)
+
             spine_items = opf.findall('.//opf:spine/opf:itemref', ns)
 
             # Read content in spine order
             for itemref in spine_items:
                 idref = itemref.get('idref')
                 if idref in manifest:
-                    content_path = manifest[idref]
-                    if opf_dir and opf_dir != '.':
-                        content_path = f"{opf_dir}/{content_path}"
+                    content_path = _zpath(base_dir, manifest[idref])
 
                     try:
                         content = zf.read(content_path).decode('utf-8', errors='ignore')
                         soup = BeautifulSoup(content, 'html.parser')
-                        collect_blocks(soup, doc)
+                        collect_blocks(soup, doc, src=content_path,
+                                       resolve_image=_image_resolver(zf, content_path))
                     except Exception:
                         continue
 
@@ -323,4 +323,87 @@ class ToEpubConverter(BaseConverter):
             zf.writestr('OEBPS/toc.ncx', ncx)
 
         return True
+
+# ── EPUB source helpers ───────────────────────────────────────────────────────
+
+_NCX_NS = {'n': 'http://www.daisy.org/z3986/2005/ncx/'}
+
+def _zpath(base: str, href: str) -> str:
+    """Resolve an href against a directory inside the zip."""
+    return posixpath.normpath(posixpath.join(base, href)) if base else href
+
+def _image_resolver(zf, doc_path: str):
+    """Return a resolver mapping an <img> src to (name, data, format)."""
+    base = posixpath.dirname(doc_path)
+
+    def resolve(href: str):
+        try:
+            path = _zpath(base, href)
+            data = zf.read(path)
+        except Exception:
+            return None
+        fmt = Path(path).suffix.lstrip('.').lower() or 'jpg'
+        return path, data, 'jpg' if fmt == 'jpeg' else fmt
+
+    return resolve
+
+def _read_toc(zf, opf, ns: dict, manifest: dict, base_dir: str) -> List[Dict[str, Any]]:
+    """Read the book's own navigation into flat entries (label, src, fragment, level)."""
+    entries: List[Dict[str, Any]] = []
+
+    spine = opf.find('.//opf:spine', ns)
+    ncx_id = spine.get('toc') if spine is not None else None
+    if not ncx_id:
+        for item in opf.findall('.//opf:manifest/opf:item', ns):
+            if item.get('media-type') == 'application/x-dtbncx+xml':
+                ncx_id = item.get('id')
+                break
+
+    if ncx_id and ncx_id in manifest:
+        ncx_path = _zpath(base_dir, manifest[ncx_id])
+        ncx_dir = posixpath.dirname(ncx_path)
+        try:
+            nav_map = etree.fromstring(zf.read(ncx_path)).find('n:navMap', _NCX_NS)
+        except Exception:
+            nav_map = None
+
+        def walk(node, level):
+            for np in node.findall('n:navPoint', _NCX_NS):
+                label = np.find('n:navLabel/n:text', _NCX_NS)
+                content = np.find('n:content', _NCX_NS)
+                src = content.get('src') if content is not None else None
+                if label is not None and src:
+                    target, _, fragment = src.partition('#')
+                    entries.append({'label': (label.text or '').strip(),
+                                    'src': _zpath(ncx_dir, target),
+                                    'fragment': fragment, 'level': level})
+                walk(np, level + 1)
+
+        if nav_map is not None:
+            walk(nav_map, 0)
+
+    if entries:
+        return entries
+
+    # EPUB 3 navigation document
+    for item in opf.findall('.//opf:manifest/opf:item', ns):
+        if 'nav' not in (item.get('properties') or '').split():
+            continue
+        nav_path = _zpath(base_dir, item.get('href'))
+        try:
+            soup = BeautifulSoup(zf.read(nav_path).decode('utf-8', 'ignore'), 'html.parser')
+        except Exception:
+            break
+        nav = soup.find('nav', attrs={'epub:type': 'toc'}) or soup.find('nav')
+        if nav is None:
+            break
+        nav_dir = posixpath.dirname(nav_path)
+        for a in nav.find_all('a', href=True):
+            target, _, fragment = a['href'].partition('#')
+            entries.append({'label': a.get_text().strip(),
+                            'src': _zpath(nav_dir, target), 'fragment': fragment,
+                            'level': max(len(a.find_parents('ol')) - 1, 0)})
+        break
+
+    return entries
 

@@ -6,6 +6,7 @@ converter that ingests these formats. Plain-text parsing understands the
 paragraphs and headings (h1-h6).
 """
 
+import posixpath
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -124,21 +125,25 @@ def _pdf_page_to_blocks(text: str, doc: Document) -> None:
 
 
 def _paragraph_runs(el):
-    """Split a <p>-like element into inline runs carrying bold/italic flags."""
+    """Split a <p>-like element into inline runs carrying bold/italic/href."""
     from bs4 import NavigableString
     runs = []
 
-    def walk(node, bold, italic):
+    def walk(node, bold, italic, href):
         for child in node.children:
             if isinstance(child, NavigableString):
                 s = str(child)
                 if s:
-                    runs.append({'text': s, 'bold': bold, 'italic': italic})
+                    run = {'text': s, 'bold': bold, 'italic': italic}
+                    if href:
+                        run['href'] = href
+                    runs.append(run)
             else:
                 name = (child.name or '').lower()
-                walk(child, bold or name in ('b', 'strong'), italic or name in ('i', 'em'))
+                walk(child, bold or name in ('b', 'strong'), italic or name in ('i', 'em'),
+                     child.get('href') if name == 'a' else href)
 
-    walk(el, False, False)
+    walk(el, False, False, None)
     return runs
 
 
@@ -146,23 +151,75 @@ _HEADINGS = {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}
 _CONTAINERS = ['ul', 'ol', 'table', 'blockquote']
 
 
-def collect_blocks(soup, doc: Document) -> None:
+def collect_blocks(soup, doc: Document, src: str = '', resolve_image=None) -> None:
     """Append content blocks from a parsed HTML tree.
 
     Captures headings, paragraphs (keeping <b>/<i>/<em>/<strong> as runs so rich
-    writers preserve bold/italic), lists, tables, blockquotes and code blocks.
-    Elements nested inside a captured container are skipped (rendered whole).
+    writers preserve bold/italic, and <a href> as a run's href), lists, tables,
+    blockquotes and code blocks. Elements nested inside a captured container are
+    skipped (rendered whole).
+
+    ``src`` names the source document so element ids become ``anchors`` on the
+    next block, letting ebook writers resolve internal links. ``resolve_image``
+    maps an <img> src to ``(name, data, format)`` (or None) to capture inline
+    images; omitted, images are ignored as before.
     """
+    for br in soup.find_all('br'):
+        br.replace_with('\n')  # <br> yields no text, fusing the words around it
+
     tags = ['p', 'pre', 'div', *_HEADINGS, *_CONTAINERS]
-    for el in soup.find_all(tags):
-        if el.find_parent(_CONTAINERS):
-            continue  # rendered as part of its enclosing container
-        name = el.name.lower()
+    tagset = set(tags)
+    pending = [src] if src else []
+    seen_images = set()
+    src_dir = posixpath.dirname(src)
+
+    def anchor_key(href):
+        """Rewrite a document-relative href to the same key space as ``anchors``."""
+        if not href or '://' in href:
+            return href
+        if href.startswith('#'):
+            return f'{src}{href}'
+        target, _, fragment = href.partition('#')
+        target = posixpath.normpath(posixpath.join(src_dir, target)) if src_dir else target
+        return f'{target}#{fragment}' if fragment else target
+
+    def attach(index):
+        """Point queued ids at the first block this element produced."""
+        if pending and index < len(doc.content):
+            doc.content[index].setdefault('anchors', []).extend(pending)
+            pending.clear()
+
+    def add_images(el):
+        if resolve_image is None:
+            return
+        for img in ([el] if el.name == 'img' else el.find_all('img')):
+            if id(img) in seen_images:
+                continue
+            seen_images.add(id(img))
+            resolved = resolve_image(img.get('src')) if img.get('src') else None
+            if resolved:
+                doc.add_image(*resolved)
+
+    for el in soup.find_all(lambda t: t.name in tagset or t.name == 'img' or t.has_attr('id')):
+        if el.has_attr('id'):
+            pending.append(f"{src}#{el['id']}")
+
+        name = (el.name or '').lower()
+        start = len(doc.content)
+
+        if name == 'img':
+            add_images(el)
+            attach(start)
+            continue
+        if name not in tagset or el.find_parent(_CONTAINERS):
+            continue  # unanchored tag, or rendered as part of its enclosing container
 
         # Only leaf content <div>s become paragraphs; container divs are skipped,
         # so div-structured EPUBs survive and content is not double-captured.
         if name == 'div' and el.find(tags):
             continue
+
+        add_images(el)  # inline images precede the text they title or illustrate
 
         if name in _HEADINGS:
             text = el.get_text().strip()
@@ -190,10 +247,14 @@ def collect_blocks(soup, doc: Document) -> None:
 
         else:  # p, pre, blockquote, leaf div
             text = el.get_text().strip()
-            if not text:
-                continue
-            runs = _paragraph_runs(el)
-            if any(r['bold'] or r['italic'] for r in runs):
-                doc.add_paragraph(text, runs=runs)
-            else:
-                doc.add_paragraph(text)
+            if text:
+                runs = _paragraph_runs(el)
+                for run in runs:
+                    if run.get('href'):
+                        run['href'] = anchor_key(run['href'])
+                if any(r['bold'] or r['italic'] or r.get('href') for r in runs):
+                    doc.add_paragraph(text, runs=runs)
+                else:
+                    doc.add_paragraph(text)
+
+        attach(start)
