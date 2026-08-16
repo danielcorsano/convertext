@@ -259,7 +259,7 @@ class ToAzw3Converter(BaseConverter):
         num_text_records = len(raw_records)
         compressed_records = [_palmdoc_compress(rec) + b'\x00' for rec in raw_records]
 
-        image_records, cover_off, thumb_off = _prepare_cover_records(doc)
+        image_records, cover_off, thumb_off, _ = _prepare_image_records(doc)
         num_images = len(image_records)
 
         chunk_indx = _build_chunk_indx(chunk_infos, text_length)
@@ -352,33 +352,57 @@ def _align4(data: bytes) -> bytes:
         return data
     return data + b'\x00' * (4 - extra)
 
-def _prepare_cover_records(doc: Document) -> tuple:
-    """Prepare cover and thumbnail JPEG records from doc.images['cover'].
-    Returns (image_records, cover_offset, thumb_offset). Empty if no cover."""
-    cover_info = doc.images.get('cover')
-    if not cover_info:
-        return ([], -1, -1)
+def _to_jpeg(data: bytes, max_size: tuple, quality: int):
+    """Re-encode image bytes as a Kindle-safe JPEG; None if unreadable."""
     try:
         from PIL import Image
-        img = Image.open(BytesIO(cover_info['data']))
+        img = Image.open(BytesIO(data))
         if img.mode != 'RGB':
             img = img.convert('RGB')
-        img.thumbnail((1600, 2400), Image.LANCZOS)
+        img.thumbnail(max_size, Image.LANCZOS)
         buf = BytesIO()
-        img.save(buf, 'JPEG', quality=80)
-        cover_jpeg = buf.getvalue()
+        img.save(buf, 'JPEG', quality=quality)
+        return buf.getvalue()
+    except Exception:
+        return None
 
-        thumb = img.copy()
-        thumb.thumbnail((330, 470), Image.LANCZOS)
-        buf = BytesIO()
-        thumb.save(buf, 'JPEG', quality=60)
-        thumb_jpeg = buf.getvalue()
+def _prepare_image_records(doc: Document, inline: bool = False) -> tuple:
+    """Prepare cover, thumbnail and optionally inline image records.
 
-        return ([cover_jpeg, thumb_jpeg], 0, 1)
-    except Exception as e:
-        import warnings
-        warnings.warn(f"Cover image could not be processed; book will have no cover: {e}")
-        return ([], -1, -1)
+    Returns (records, cover_offset, thumb_offset, recindex_by_name); the
+    recindex is the 1-based MOBI image reference for each named inline image.
+    """
+    records = []
+    cover_off = thumb_off = -1
+
+    cover_info = doc.images.get('cover')
+    if cover_info:
+        cover_jpeg = _to_jpeg(cover_info['data'], (1600, 2400), 80)
+        thumb_jpeg = _to_jpeg(cover_info['data'], (330, 470), 60)
+        if cover_jpeg and thumb_jpeg:
+            records.extend([cover_jpeg, thumb_jpeg])
+            cover_off, thumb_off = 0, 1
+        else:
+            import warnings
+            warnings.warn("Cover image could not be processed; book will have no cover")
+
+    recindex = {}
+    if inline:
+        skipped = 0
+        for name, info in doc.images.items():
+            if name == 'cover':
+                continue
+            jpeg = _to_jpeg(info.get('data', b''), (1200, 1600), 75)
+            if jpeg is None:
+                skipped += 1
+                continue
+            recindex[name] = len(records) + 1  # MOBI recindex is 1-based
+            records.append(jpeg)
+        if skipped:
+            import warnings
+            warnings.warn(f"{skipped} inline image(s) could not be processed and were skipped")
+
+    return records, cover_off, thumb_off, recindex
 
 def _split_text_records(text_data: bytes) -> list:
     """Split text into 4096-byte records at UTF-8 character boundaries."""

@@ -13,7 +13,7 @@ from convertext.converters.ebooks.palmdoc import (
 )
 from convertext.converters.ebooks.htmlbuild import block_to_html
 from convertext.converters.ebooks.azw3 import (
-    _prepare_cover_records, _build_ncx_indx,
+    _prepare_image_records, _build_ncx_indx,
 )
 
 _PALM_EPOCH = 2082844800  # seconds from 1904-01-01 to Unix epoch (1970-01-01)
@@ -57,7 +57,7 @@ class ToMobiConverter(BaseConverter):
 
 # ── MOBI v6 binary building ───────────────────────────────────────────────────
 
-def _doc_to_html(doc: Document) -> tuple:
+def _doc_to_html(doc: Document, img_ref=None) -> tuple:
     """Convert Document to minimal MOBI-compatible HTML. Returns (html_str, toc_entries)."""
     parts = ['<html><head><meta charset="utf-8"/></head><body>']
     running = len(parts[0].encode('utf-8'))  # bytes of '\n'.join(parts) so far
@@ -72,7 +72,7 @@ def _doc_to_html(doc: Document) -> tuple:
             offset = running + 1  # +1 for the \n before the upcoming fragment
             toc_entries.append({'label': block.get('data', ''), 'offset': offset})
             first_h1 = False
-        frag = block_to_html(block)
+        frag = block_to_html(block, img_ref=img_ref)
         if frag:
             parts.append(frag)
             running += 1 + len(frag.encode('utf-8'))
@@ -241,15 +241,17 @@ def _write_palmdb(path: Path, all_records: List[bytes], title: str) -> bool:
 def _write_mobi(doc: Document, path: Path) -> bool:
     """Orchestrate MOBI v6 file creation from a Document."""
     doc.metadata['title'] = doc.metadata.get('title') or path.stem
-    html_str, toc_entries = _doc_to_html(doc)
+
+    image_records, cover_off, thumb_off, recindex = _prepare_image_records(doc, inline=True)
+    num_images = len(image_records)
+
+    html_str, toc_entries = _doc_to_html(doc, img_ref=recindex.get)
     html_bytes = html_str.encode('utf-8')
 
     chunks = [html_bytes[i:i + 4096] for i in range(0, max(len(html_bytes), 1), 4096)]
     compressed = [_palmdoc_compress(c) for c in chunks]
     num_text = len(compressed)
 
-    image_records, cover_off, thumb_off = _prepare_cover_records(doc)
-    num_images = len(image_records)
     ncx_indx = _build_ncx_indx(toc_entries)
 
     layout = _mobi_record_layout(num_text, num_images, len(ncx_indx))

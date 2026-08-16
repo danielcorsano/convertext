@@ -430,11 +430,11 @@ def test_mobi_toc_offsets_match_byte_positions():
 
 def test_cover_failure_warns():
     import warnings
-    from convertext.converters.ebooks.azw3 import _prepare_cover_records
+    from convertext.converters.ebooks.azw3 import _prepare_image_records
     doc = Document()
     doc.images['cover'] = {'data': b'not a real image', 'format': 'jpg'}
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        records, cover_off, thumb_off = _prepare_cover_records(doc)
+        records, cover_off, thumb_off, _ = _prepare_image_records(doc)
     assert records == [] and cover_off == -1 and thumb_off == -1
     assert any('cover' in str(w.message).lower() for w in caught)

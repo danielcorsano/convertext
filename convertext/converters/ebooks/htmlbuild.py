@@ -3,8 +3,9 @@
 One renderer shared by the MOBI v6, KF8/AZW3 and EPUB writers so every block
 type is emitted the same way. Callers pass their own escape function (MOBI/KF8
 use html.escape, EPUB uses converters.utils.escape_html) and interleave their
-own structure (page breaks, chapters, TOC offsets). Images produce no inline
-HTML here (inline image records are a separate feature); callers may count them.
+own structure (page breaks, chapters, TOC offsets). Images render only when the
+caller supplies an ``img_ref`` resolver, since the recindex depends on the
+writer's record layout.
 """
 
 import html as _html
@@ -23,11 +24,19 @@ def _run_html(run: dict, escape) -> str:
     return s
 
 
-def block_to_html(block: dict, escape=None) -> str:
-    """Render one content block to a Kindle-safe HTML fragment ('' if empty)."""
+def block_to_html(block: dict, escape=None, img_ref=None) -> str:
+    """Render one content block to a Kindle-safe HTML fragment ('' if empty).
+
+    ``img_ref`` maps an image block's name to a MOBI recindex; without it images
+    render to nothing, as before.
+    """
     if escape is None:
         escape = _default_escape
     t = block.get('type')
+
+    if t == 'image':
+        index = img_ref(block.get('name')) if img_ref else None
+        return f'<img recindex="{index:05d}"/>' if index else ''
 
     if t == 'heading':
         level = block.get('level', 1)
@@ -63,4 +72,4 @@ def block_to_html(block: dict, escape=None) -> str:
     if t == 'link':
         return f'<p>{escape(block.get("text", ""))} ({escape(block.get("url", ""))})</p>'
 
-    return ''  # image / unknown: no inline HTML
+    return ''  # unknown block type: no inline HTML
