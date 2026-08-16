@@ -95,7 +95,7 @@ def test_doc_to_html_basic():
     doc.add_heading('Chapter One', 1)
     doc.add_paragraph('First paragraph.')
     doc.add_paragraph('Second paragraph.')
-    html, toc = _doc_to_html(doc)
+    html, toc, _ = _doc_to_html(doc)
     assert '<h1>Chapter One</h1>' in html
     assert '<p>First paragraph.</p>' in html
     assert '<p>Second paragraph.</p>' in html
@@ -110,7 +110,7 @@ def test_doc_to_html_pagebreak_before_second_h1():
     doc.add_heading('Chapter One', 1)
     doc.add_paragraph('Text.')
     doc.add_heading('Chapter Two', 1)
-    html, toc = _doc_to_html(doc)
+    html, toc, _ = _doc_to_html(doc)
     assert '<mbp:pagebreak/>' in html
     assert html.index('<h1>Chapter One') < html.index('<mbp:pagebreak/>')
     assert len(toc) == 2
@@ -121,7 +121,7 @@ def test_doc_to_html_pagebreak_before_second_h1():
 def test_doc_to_html_escaping():
     doc = Document()
     doc.add_paragraph('<b>bold</b> & "quotes"')
-    html, toc = _doc_to_html(doc)
+    html, toc, _ = _doc_to_html(doc)
     assert '&lt;b&gt;' in html
     assert '&amp;' in html
     assert '&quot;' in html

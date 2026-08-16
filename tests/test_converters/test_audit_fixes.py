@@ -300,7 +300,7 @@ def test_docx_runs_grouped_into_single_paragraph():
         assert paras[0]['data'] == 'The word bold is emphasized.'
         assert 'runs' in paras[0]
 
-        html, _ = _doc_to_html(doc)
+        html, _, _ = _doc_to_html(doc)
         # one paragraph (P0.8), with the bold run rendered inline (P1.2)
         assert '<p>The word <b>bold</b> is emphasized.</p>' in html
         assert html.count('<p>') == 1  # one paragraph, not three
@@ -318,7 +318,7 @@ def test_html_inline_formatting_preserved_to_ebook():
         doc = read_html(p, {})
     paras = [b for b in doc.content if b['type'] == 'paragraph']
     assert len(paras) == 1 and 'runs' in paras[0]
-    html, _ = _doc_to_html(doc)
+    html, _, _ = _doc_to_html(doc)
     assert '<b>bold</b>' in html
     assert '<i>italic</i>' in html
     assert html.count('<p>') == 1  # still a single paragraph
@@ -337,7 +337,7 @@ def test_markdown_tables_and_lists_captured():
     types = [b['type'] for b in doc.content]
     assert 'table' in types
     assert 'list' in types
-    html, _ = _doc_to_html(doc)
+    html, _, _ = _doc_to_html(doc)
     assert '<table>' in html and '<td>1</td>' in html
     assert '<ul>' in html and '<li>one</li>' in html
 
@@ -418,7 +418,7 @@ def test_mobi_toc_offsets_match_byte_positions():
     doc.add_paragraph('Body of chapter one.')
     doc.add_heading('Chapter Two', 1)
     doc.add_paragraph('Body of chapter two.')
-    html_str, toc = _doc_to_html(doc)
+    html_str, toc, _ = _doc_to_html(doc)
     hb = html_str.encode('utf-8')
     assert len(toc) == 2
     for entry in toc:

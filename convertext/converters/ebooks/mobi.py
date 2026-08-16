@@ -1,8 +1,10 @@
 """MOBI v6 write-only converter."""
 
 import random
+import re
 import struct
 import time
+from html import escape as _escape
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -57,39 +59,122 @@ class ToMobiConverter(BaseConverter):
 
 # ── MOBI v6 binary building ───────────────────────────────────────────────────
 
+_PLACEHOLDER = 'filepos=0000000000'
+_GENERATED_TOC = '\x00generated-toc'
+
+def _toc_page_key(doc: Document):
+    """Key of the book's own contents page, or a marker to generate one."""
+    if not doc.toc:
+        return None
+    for entry in doc.toc:
+        if re.fullmatch(r'\s*(table of )?contents\s*', entry.get('label') or '', re.I):
+            return _entry_key(entry)
+    return _GENERATED_TOC
+
+def _entry_key(entry: dict) -> str:
+    return f"{entry['src']}#{entry['fragment']}" if entry.get('fragment') else entry['src']
+
 def _doc_to_html(doc: Document, img_ref=None) -> tuple:
-    """Convert Document to minimal MOBI-compatible HTML. Returns (html_str, toc_entries)."""
-    parts = ['<html><head><meta charset="utf-8"/></head><body>']
-    running = len(parts[0].encode('utf-8'))  # bytes of '\n'.join(parts) so far
-    toc_entries = []
+    """Convert Document to MOBI-compatible HTML.
+
+    Returns (html_str, toc_entries, text_start) where text_start is the rawml
+    offset the Kindle opens the book at.
+
+    Internal links resolve in a second pass: every ``filepos`` is written as a
+    fixed-width placeholder first, so the byte offsets measured while building
+    stay valid when the placeholders are patched with real targets.
+    """
+    link_targets = []
+    anchor_offsets = {}
+    pending_anchors = []
+
+    def link_ref(href):
+        """Register an internal link target and return its placeholder."""
+        if not href or '://' in href:
+            return None
+        link_targets.append(href)
+        return _PLACEHOLDER
+
+    toc_key = _toc_page_key(doc)
+    head = '<html><head>'
+    if toc_key:
+        link_targets.append(toc_key)
+        head += (f'<guide><reference type="toc" title="Table of Contents" '
+                 f'{_PLACEHOLDER} /></guide>')
+    head += '<meta charset="utf-8"/></head><body>'
+
+    parts = [head]
+    running = len(head.encode('utf-8'))  # bytes of '\n'.join(parts) so far
+    headings = []
     first_h1 = True
+
+    def emit(frag):
+        """Append a fragment, resolving any anchors queued for it."""
+        nonlocal running
+        offset = running + 1  # +1 for the \n that '\n'.join inserts
+        for key in pending_anchors:
+            anchor_offsets.setdefault(key, offset)
+        pending_anchors.clear()
+        parts.append(frag)
+        running += 1 + len(frag.encode('utf-8'))
+        return offset
+
     for block in doc.content:
+        pending_anchors.extend(block.get('anchors', ()))
         if block.get('type') == 'heading' and block.get('level', 1) == 1:
             if not first_h1:
-                pb = '<mbp:pagebreak/>'
-                parts.append(pb)
-                running += 1 + len(pb.encode('utf-8'))
-            offset = running + 1  # +1 for the \n before the upcoming fragment
-            toc_entries.append({'label': block.get('data', ''), 'offset': offset})
+                emit('<mbp:pagebreak/>')
+            headings.append({'label': block.get('data', ''), 'offset': running + 1})
             first_h1 = False
-        frag = block_to_html(block, img_ref=img_ref)
+        frag = block_to_html(block, img_ref=img_ref, link_ref=link_ref)
         if frag:
-            parts.append(frag)
-            running += 1 + len(frag.encode('utf-8'))
+            emit(frag)
+
+    if toc_key == _GENERATED_TOC:
+        pending_anchors.append(_GENERATED_TOC)
+        emit('<mbp:pagebreak/><h1>Table of Contents</h1>')
+        for entry in doc.toc:
+            attr = link_ref(_entry_key(entry))
+            label = _escape(entry.get('label') or '')
+            emit(f'<p><a {attr}>{label}</a></p>' if attr else f'<p>{label}</p>')
+
     tail = '</body></html>'
     parts.append(tail)
     running += 1 + len(tail.encode('utf-8'))
     html_str = '\n'.join(parts)
-    html_len = running
-    # Fill in section lengths
-    for i, entry in enumerate(toc_entries):
-        next_off = toc_entries[i + 1]['offset'] if i + 1 < len(toc_entries) else html_len
-        entry['length'] = next_off - entry['offset']
-    return html_str, toc_entries
+
+    if link_targets:
+        pos = iter(link_targets)
+        html_str = re.sub(re.escape(_PLACEHOLDER),
+                          lambda _m: f'filepos={anchor_offsets.get(next(pos), 0):010d}',
+                          html_str)
+
+    text_start = len(head.encode('utf-8')) + 1  # first fragment, past the head
+    return html_str, _toc_entries(doc, anchor_offsets, headings, running), text_start
+
+def _toc_entries(doc: Document, anchor_offsets: dict, headings: list, html_len: int) -> list:
+    """Resolve the source's TOC to rawml offsets, falling back to h1 headings."""
+    entries = []
+    seen = set()
+    for entry in doc.toc:
+        offset = anchor_offsets.get(_entry_key(entry))
+        if offset is None or offset in seen:
+            continue
+        seen.add(offset)
+        entries.append({'label': entry.get('label') or 'Chapter', 'offset': offset})
+    entries.sort(key=lambda e: e['offset'])
+
+    if not entries:
+        entries = headings
+    for i, entry in enumerate(entries):
+        next_offset = entries[i + 1]['offset'] if i + 1 < len(entries) else html_len
+        entry['length'] = next_offset - entry['offset']
+    return entries
 
 def _build_exth(title: str, author: str, language: str = 'en',
                 metadata: dict = None, cover_offset: int = -1,
-                thumb_offset: int = -1, num_images: int = 0) -> bytes:
+                thumb_offset: int = -1, num_images: int = 0,
+                text_start: int = -1) -> bytes:
     """Build EXTH header block with metadata records."""
     metadata = metadata or {}
 
@@ -113,6 +198,8 @@ def _build_exth(title: str, author: str, language: str = 'en',
         records.append(rec(201, struct.pack('>I', cover_offset)))
     if thumb_offset >= 0:
         records.append(rec(202, struct.pack('>I', thumb_offset)))
+    if text_start >= 0:
+        records.append(rec(116, struct.pack('>I', text_start)))  # where reading opens
 
     data = b''.join(records)
     raw_len = 12 + len(data)
@@ -245,7 +332,7 @@ def _write_mobi(doc: Document, path: Path) -> bool:
     image_records, cover_off, thumb_off, recindex = _prepare_image_records(doc, inline=True)
     num_images = len(image_records)
 
-    html_str, toc_entries = _doc_to_html(doc, img_ref=recindex.get)
+    html_str, toc_entries, text_start = _doc_to_html(doc, img_ref=recindex.get)
     html_bytes = html_str.encode('utf-8')
 
     chunks = [html_bytes[i:i + 4096] for i in range(0, max(len(html_bytes), 1), 4096)]
@@ -261,7 +348,7 @@ def _write_mobi(doc: Document, path: Path) -> bool:
     language = doc.metadata.get('language', 'en')
     exth = _build_exth(title, author, language, metadata=doc.metadata,
                        cover_offset=cover_off, thumb_offset=thumb_off,
-                       num_images=num_images)
+                       num_images=num_images, text_start=text_start)
 
     rec0 = _build_record0(doc, len(html_bytes), num_text,
                            layout['flis_idx'], layout['fcis_idx'], exth,

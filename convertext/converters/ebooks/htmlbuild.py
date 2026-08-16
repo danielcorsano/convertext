@@ -24,11 +24,28 @@ def _run_html(run: dict, escape) -> str:
     return s
 
 
-def block_to_html(block: dict, escape=None, img_ref=None) -> str:
+def _runs_html(runs: list, escape, link_ref) -> str:
+    """Render runs, wrapping consecutive runs that share an href in one anchor."""
+    out = []
+    i = 0
+    while i < len(runs):
+        href = runs[i].get('href')
+        j = i
+        while j < len(runs) and runs[j].get('href') == href:
+            j += 1
+        inner = ''.join(_run_html(r, escape) for r in runs[i:j])
+        attr = link_ref(href) if href and link_ref else None
+        out.append(f'<a {attr}>{inner}</a>' if attr else inner)
+        i = j
+    return ''.join(out)
+
+
+def block_to_html(block: dict, escape=None, img_ref=None, link_ref=None) -> str:
     """Render one content block to a Kindle-safe HTML fragment ('' if empty).
 
-    ``img_ref`` maps an image block's name to a MOBI recindex; without it images
-    render to nothing, as before.
+    ``img_ref`` maps an image block's name to a MOBI recindex and ``link_ref``
+    maps a run's href to anchor attributes; without them images and links render
+    as before (dropped, and as plain text respectively).
     """
     if escape is None:
         escape = _default_escape
@@ -36,7 +53,7 @@ def block_to_html(block: dict, escape=None, img_ref=None) -> str:
 
     if t == 'image':
         index = img_ref(block.get('name')) if img_ref else None
-        return f'<img recindex="{index:05d}"/>' if index else ''
+        return f'<img recindex="{index:05d}"></img>' if index else ''
 
     if t == 'heading':
         level = block.get('level', 1)
@@ -45,7 +62,7 @@ def block_to_html(block: dict, escape=None, img_ref=None) -> str:
     if t in ('paragraph', 'text'):
         runs = block.get('runs')
         if runs:
-            inner = ''.join(_run_html(r, escape) for r in runs)
+            inner = _runs_html(runs, escape, link_ref)
         else:
             inner = escape(block.get('data', ''))
         return f'<p>{inner}</p>' if inner else ''
