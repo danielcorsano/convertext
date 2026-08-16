@@ -14,7 +14,10 @@ Convert between all major text, document and ebook extensions with a single term
 PDF, DOCX, RTF, TXT, Markdown, HTML, EPUB, FB2
 
 **Kindle:**
-Write MOBI and AZW3/KF8 from TXT, HTML, Markdown, EPUB; read MOBI/AZW/AZW3 to TXT, HTML, Markdown
+Write MOBI and AZW3/KF8 *(beta)* from TXT, HTML, Markdown, EPUB; read MOBI/AZW/AZW3 to TXT, HTML, Markdown
+
+> **AZW3 output is beta.** It is not yet reliable on all Kindle devices — prefer MOBI output for now.
+> Chapter navigation is still being implemented for both Kindle formats.
 
 **Read Only:**
 DOC, ODT

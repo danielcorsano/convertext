@@ -10,6 +10,8 @@ from convertext.core import ConversionEngine
 from convertext.registry import get_registry
 from convertext.converters.loader import load_converters
 
+BETA_OUTPUTS = {'azw3'}  # output formats not yet reliable on all devices
+
 
 @click.command()
 @click.argument('files', nargs=-1, type=click.Path(exists=True), required=False)
@@ -91,7 +93,11 @@ def main(
             return
         click.echo("Supported format conversions:\n")
         for source, targets in sorted(formats.items()):
-            click.echo(f"  {source.upper()} → {', '.join(t.upper() for t in sorted(set(targets)))}")
+            names = [t.upper() + (' (beta)' if t in BETA_OUTPUTS else '')
+                     for t in sorted(set(targets))]
+            click.echo(f"  {source.upper()} → {', '.join(names)}")
+        if any(t in BETA_OUTPUTS for targets in formats.values() for t in targets):
+            click.echo("\n  (beta) = not yet reliable on all devices")
         return
 
     if not files:
