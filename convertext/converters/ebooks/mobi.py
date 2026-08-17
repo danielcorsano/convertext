@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from convertext.converters.base import BaseConverter, Document
-from convertext.converters.readers import read_txt, read_html, read_markdown
+from convertext.converters.readers import read_txt, read_html, read_markdown, read_pdf
 from convertext.converters.ebooks.palmdoc import (
     palmdoc_compress as _palmdoc_compress, FLIS as _FLIS, EOF as _EOF,
 )
@@ -33,7 +33,7 @@ class ToMobiConverter(BaseConverter):
 
     @property
     def input_formats(self) -> List[str]:
-        return ['txt', 'html', 'htm', 'md', 'epub']
+        return ['txt', 'html', 'htm', 'md', 'epub', 'docx', 'pdf']
 
     @property
     def output_formats(self) -> List[str]:
@@ -45,6 +45,7 @@ class ToMobiConverter(BaseConverter):
         return _write_mobi(doc, target_path)
 
     def _read_source(self, path: Path, config: Dict[str, Any]) -> Document:
+        """Read a source directly; every hop through an intermediate loses images."""
         fmt = path.suffix.lstrip('.').lower()
         if fmt == 'txt':
             return read_txt(path, config)
@@ -52,9 +53,14 @@ class ToMobiConverter(BaseConverter):
             return read_html(path, config)
         elif fmt in ('md', 'markdown'):
             return read_markdown(path, config)
+        elif fmt == 'pdf':
+            return read_pdf(path, config)
         elif fmt == 'epub':
             from convertext.converters.ebooks.epub import EpubConverter
             return EpubConverter()._read_epub(path, config)
+        elif fmt == 'docx':
+            from convertext.converters.documents.docx import DocxConverter
+            return DocxConverter()._read_docx(path, config)
         raise ValueError(f"Unsupported source format: {fmt}")
 
 # ── MOBI v6 binary building ───────────────────────────────────────────────────

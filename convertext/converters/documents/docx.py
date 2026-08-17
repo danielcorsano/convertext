@@ -7,6 +7,7 @@ import docx
 
 from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
+from convertext.converters.readers import image_format
 
 class DocxConverter(BaseConverter):
     """DOCX/DOC format converter."""
@@ -47,6 +48,8 @@ class DocxConverter(BaseConverter):
         }
 
         for para in docx_doc.paragraphs:
+            _add_para_images(para, docx_doc.part, doc)
+
             if para.style.name.startswith('Heading'):
                 try:
                     level = int(para.style.name.replace('Heading ', ''))
@@ -161,3 +164,23 @@ class DocxConverter(BaseConverter):
                     f.write('#' * block['level'] + ' ' + block['data'] + '\n\n')
         return True
 
+
+# ── DOCX source helpers ───────────────────────────────────────────────────────
+
+_DRAWING_NS = {'a': 'http://schemas.openxmlformats.org/drawingml/2006/main'}
+_EMBED_ATTR = ('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+               'embed')
+
+def _add_para_images(para, part, doc: Document) -> None:
+    """Add images embedded in a paragraph, in the order they appear in it."""
+    for blip in para._p.findall('.//a:blip', _DRAWING_NS):
+        rel_id = blip.get(_EMBED_ATTR)
+        if not rel_id:
+            continue
+        try:
+            image_part = part.related_parts[rel_id]
+            data = image_part.blob
+        except Exception:
+            continue
+        name = str(image_part.partname)
+        doc.add_image(name, data, image_format(name))

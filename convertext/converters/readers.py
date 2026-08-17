@@ -6,6 +6,8 @@ converter that ingests these formats. Plain-text parsing understands the
 paragraphs and headings (h1-h6).
 """
 
+import base64
+import hashlib
 import posixpath
 import re
 from pathlib import Path
@@ -44,8 +46,43 @@ def read_txt(path: Path, config: Optional[Dict[str, Any]] = None) -> Document:
     return doc
 
 
+def image_format(filename: str) -> str:
+    """Normalise an image filename's extension to the format tag writers use."""
+    fmt = Path(filename).suffix.lstrip('.').lower()
+    return 'jpg' if fmt in ('', 'jpeg') else fmt
+
+
+def file_image_resolver(base_dir: Path):
+    """Return a resolver mapping an <img> src to (name, data, format).
+
+    Handles both files beside the document and inline ``data:`` URIs, the two
+    ways a standalone HTML page carries images.
+    """
+    def resolve(href: str):
+        if href.startswith('data:'):
+            header, _, payload = href.partition(',')
+            if 'base64' not in header:
+                return None
+            try:
+                data = base64.b64decode(payload)
+            except Exception:
+                return None
+            subtype = header.split('/')[-1].split(';')[0]
+            name = f'data:{hashlib.md5(data).hexdigest()[:12]}'
+            return name, data, image_format(f'x.{subtype}')
+
+        target = base_dir / unquote(href)
+        try:
+            data = target.read_bytes()
+        except Exception:
+            return None
+        return str(target), data, image_format(target.name)
+
+    return resolve
+
+
 def read_html(path: Path, config: Optional[Dict[str, Any]] = None) -> Document:
-    """Read HTML (or .htm), capturing title, paragraphs and headings."""
+    """Read HTML (or .htm), capturing title, paragraphs, headings and images."""
     from bs4 import BeautifulSoup
     doc = Document()
     with open(path, 'r', encoding=_encoding(config)) as f:
@@ -60,7 +97,8 @@ def read_html(path: Path, config: Optional[Dict[str, Any]] = None) -> Document:
         if h1 and h1.get_text().strip():
             doc.metadata['title'] = h1.get_text().strip()
 
-    collect_blocks(soup, doc)
+    collect_blocks(soup, doc, src=path.name,
+                   resolve_image=file_image_resolver(path.parent))
     return doc
 
 
@@ -77,8 +115,16 @@ def read_markdown(path: Path, config: Optional[Dict[str, Any]] = None) -> Docume
     return doc
 
 
+_PDF_MIN_IMAGE_BYTES = 4096  # below this it is a rule, bullet or scan artefact
+
+
 def read_pdf(path: Path, config: Optional[Dict[str, Any]] = None) -> Document:
-    """Read a PDF, grouping lines into paragraphs and detecting simple headings."""
+    """Read a PDF, grouping lines into paragraphs and detecting simple headings.
+
+    Images are collected per page and emitted before that page's text: a PDF
+    records text and images as separate streams, so their true position within
+    the page's flow is not recoverable.
+    """
     import pypdf
     doc = Document()
     with open(path, 'rb') as f:
@@ -89,9 +135,27 @@ def read_pdf(path: Path, config: Optional[Dict[str, Any]] = None) -> Document:
                 val = meta.get(tag)
                 if val and str(val).strip():
                     doc.metadata[key] = str(val).strip()
-        for page in reader.pages:
+        for number, page in enumerate(reader.pages):
+            _pdf_page_images(page, number, doc)
             _pdf_page_to_blocks(page.extract_text() or '', doc)
     return doc
+
+
+def _pdf_page_images(page, number: int, doc: Document) -> None:
+    """Add a page's embedded images, skipping decorations and unreadable ones."""
+    try:
+        images = list(page.images)
+    except Exception:
+        return
+    for index, image in enumerate(images):
+        try:
+            data = image.data
+        except Exception:
+            continue
+        if not data or len(data) < _PDF_MIN_IMAGE_BYTES:
+            continue
+        name = f'pdf:p{number}:{index}:{image.name or "image"}'
+        doc.add_image(name, data, image_format(image.name or ''))
 
 
 def _pdf_is_heading(line: str) -> bool:

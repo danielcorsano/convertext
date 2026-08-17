@@ -9,7 +9,8 @@ import zipfile
 from lxml import etree
 from bs4 import BeautifulSoup
 
-from convertext.converters.readers import read_html, read_markdown, read_txt, collect_blocks
+from convertext.converters.readers import (read_html, read_markdown, read_txt,
+                                           collect_blocks, image_format)
 from convertext.converters.ebooks.htmlbuild import block_to_html
 from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
@@ -348,8 +349,7 @@ def _image_resolver(zf, doc_path: str):
             data = zf.read(path)
         except Exception:
             return None
-        fmt = Path(path).suffix.lstrip('.').lower() or 'jpg'
-        return path, data, 'jpg' if fmt == 'jpeg' else fmt
+        return path, data, image_format(path)
 
     return resolve
 

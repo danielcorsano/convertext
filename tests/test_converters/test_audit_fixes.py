@@ -367,7 +367,8 @@ def test_pdf_to_mobi_avoids_txt_intermediate():
     path = get_registry().find_conversion_path('pdf', 'mobi')
     assert path is not None
     assert 'txt' not in path  # a txt roundtrip would destroy headings/TOC
-    assert path[1] in ('epub', 'html')  # rich intermediate, deterministically
+    # Direct now: any intermediate writer drops images, so pdf is read in place.
+    assert path == ['pdf', 'mobi']
 
 
 # ── P1.5 / P3.4 — one PDF reader with heading detection; pdf->epub composed ────

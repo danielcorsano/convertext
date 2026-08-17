@@ -137,6 +137,85 @@ def test_image_block_renders_recindex_when_resolvable():
     assert block_to_html(block) == ''  # no resolver: dropped, as before
 
 
+# ── Inline images from non-EPUB sources ───────────────────────────────────────
+
+def _jpeg_bytes() -> bytes:
+    """A genuinely encoded JPEG. The repo carries no image fixture, so Pillow
+    (already a dependency) encodes one rather than checking book art in."""
+    from io import BytesIO
+    from PIL import Image
+    buf = BytesIO()
+    Image.new('RGB', (64, 48), (90, 120, 160)).save(buf, 'JPEG')
+    return buf.getvalue()
+
+
+def test_html_images_from_file_and_data_uri():
+    import base64
+    jpeg = _jpeg_bytes()
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d)
+        (base / 'pic.jpg').write_bytes(jpeg)
+        page = base / 'page.html'
+        page.write_text(
+            '<html><body><h1>C</h1>'
+            '<p><img src="pic.jpg"/>after file image</p>'
+            f'<p><img src="data:image/jpeg;base64,{base64.b64encode(jpeg).decode()}"/>after data uri</p>'
+            '</body></html>')
+        doc = read_html(page)
+
+    assert len(doc.images) == 2, "file-referenced and data-URI images both expected"
+    assert [b['type'] for b in doc.content[:3]] == ['heading', 'image', 'paragraph']
+    assert all(i['format'] == 'jpg' for i in doc.images.values())
+
+
+def test_docx_images_are_read_in_paragraph_order():
+    import docx as docx_lib
+    from convertext.converters.documents.docx import DocxConverter
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d)
+        (base / 'pic.jpg').write_bytes(_jpeg_bytes())
+        built = docx_lib.Document()
+        built.add_heading('Chapter', 1)
+        built.add_paragraph('before')
+        built.add_picture(str(base / 'pic.jpg'))
+        built.add_paragraph('after')
+        source = base / 'doc.docx'
+        built.save(str(source))
+        doc = DocxConverter()._read_docx(source, {})
+
+    assert [b['type'] for b in doc.content] == ['heading', 'paragraph', 'image', 'paragraph']
+    assert len(doc.images) == 1
+
+
+def test_inline_images_become_records_and_references():
+    """A source image must reach the file as both a record and an <img> reference."""
+    doc = Document()
+    doc.metadata['title'] = 'T'
+    doc.add_image('pic.jpg', _jpeg_bytes(), 'jpg')
+    doc.add_paragraph('Body.')
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / 'book.mobi'
+        assert M._write_mobi(doc, out) is True
+        assert b'<img recindex="00001">' in _rawml(out)
+        assert struct.unpack('>I', _exth(out)[125])[0] == 1  # image count
+
+
+def test_image_format_normalisation():
+    from convertext.converters.readers import image_format
+    assert image_format('a/b/ch1.JPEG') == 'jpg'
+    assert image_format('x.png') == 'png'
+    assert image_format('') == 'jpg'  # unknown falls back to jpeg
+
+
+def test_docx_and_pdf_reach_mobi_directly():
+    # Any intermediate writer drops images, so these must not be multi-hop.
+    from convertext.converters.loader import load_converters
+    from convertext.registry import get_registry
+    load_converters()
+    for source in ('docx', 'pdf', 'html'):
+        assert get_registry().find_conversion_path(source, 'mobi') == [source, 'mobi']
+
+
 # ── End to end, and regressions on what already worked ────────────────────────
 
 def test_epub_to_mobi_structure():
