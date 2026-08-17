@@ -9,8 +9,7 @@ import zipfile
 from lxml import etree
 from bs4 import BeautifulSoup
 
-from convertext.converters.readers import (read_html, read_markdown, read_txt,
-                                           collect_blocks, image_format)
+from convertext.converters.readers import collect_blocks, image_format, read_source
 from convertext.converters.ebooks.htmlbuild import block_to_html
 from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
@@ -194,7 +193,7 @@ class ToEpubConverter(BaseConverter):
 
     @property
     def input_formats(self) -> List[str]:
-        return ['txt', 'html', 'htm', 'md']
+        return ['txt', 'html', 'htm', 'md', 'docx']
 
     @property
     def output_formats(self) -> List[str]:
@@ -202,15 +201,9 @@ class ToEpubConverter(BaseConverter):
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert to EPUB."""
-        source_fmt = source_path.suffix.lstrip('.').lower()
-
-        if source_fmt == 'txt':
-            doc = read_txt(source_path, config)
-        elif source_fmt in ['html', 'htm']:
-            doc = read_html(source_path, config)
-        elif source_fmt in ['md', 'markdown']:
-            doc = read_markdown(source_path, config)
-        else:
+        try:
+            doc = read_source(source_path, config)
+        except ValueError:
             return False
         self._apply_metadata_overrides(doc, source_path, config)
 
@@ -225,10 +218,17 @@ class ToEpubConverter(BaseConverter):
         language = doc.metadata.get('language', 'en')
         uid = str(uuid.uuid4())
 
+        images = _epub_image_files(doc)
+
+        def img_tag(name):
+            """EPUB references an image by its path relative to the XHTML."""
+            entry = images.get(name)
+            return f'<img src="{entry[0]}" alt=""/>' if entry else None
+
         # Split content into chapters
-        chapters = []
-        current_chapter = []
-        chapter_titles = []
+        chapters: List[List[str]] = []
+        current_chapter: List[str] = []
+        chapter_titles: List[str] = []
 
         for block in doc.content:
             if block['type'] == 'heading' and block.get('level', 1) == 1:
@@ -236,7 +236,7 @@ class ToEpubConverter(BaseConverter):
                     chapters.append(current_chapter)
                     current_chapter = []
                 chapter_titles.append(block['data'])
-            frag = block_to_html(block, escape=escape_html)
+            frag = block_to_html(block, escape=escape_html, img_ref=img_tag)
             if frag:
                 current_chapter.append(frag)
 
@@ -269,6 +269,22 @@ class ToEpubConverter(BaseConverter):
             spine_items = []
             toc_items = []
 
+            cover_id = None
+            for index, (name, (href, media_type, is_cover)) in enumerate(images.items()):
+                image_id = f'img{index}'
+                properties = ''
+                if is_cover:
+                    cover_id = image_id
+                    properties = ' properties="cover-image"'
+                manifest_items.append(f'    <item id="{image_id}" href="{href}" '
+                                      f'media-type="{media_type}"{properties}/>')
+                # Raster images carry their own compression; deflating them again
+                # costs time for nothing. SVG is text, so it still benefits.
+                compression = (zipfile.ZIP_DEFLATED if media_type == 'image/svg+xml'
+                               else zipfile.ZIP_STORED)
+                zf.writestr(f'OEBPS/{href}', doc.images[name]['data'],
+                            compress_type=compression)
+
             for i, (chapter, chapter_title) in enumerate(zip(chapters, chapter_titles), 1):
                 filename = f'chap_{i:02d}.xhtml'
                 manifest_items.append(f'    <item id="chapter{i}" href="{filename}" media-type="application/xhtml+xml"/>')
@@ -297,6 +313,7 @@ class ToEpubConverter(BaseConverter):
     <dc:creator>{escape_html(author)}</dc:creator>
     <dc:language>{language}</dc:language>
     <meta property="dcterms:modified">{dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}</meta>
+{f'    <meta name="cover" content="{cover_id}"/>' if cover_id else ''}
   </metadata>
   <manifest>
     <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
@@ -329,6 +346,23 @@ class ToEpubConverter(BaseConverter):
 # ── EPUB source helpers ───────────────────────────────────────────────────────
 
 _NCX_NS = {'n': 'http://www.daisy.org/z3986/2005/ncx/'}
+_MEDIA_TYPES = {'jpg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif',
+                'svg': 'image/svg+xml', 'webp': 'image/webp'}
+
+def _epub_image_files(doc: Document) -> Dict[str, tuple]:
+    """Map each image name to (href, media_type, is_cover) for the EPUB package.
+
+    Source names are arbitrary (zip paths, data-URI digests, PDF page keys), so
+    they are renamed to stable, portable filenames rather than trusted as paths.
+    """
+    files = {}
+    for index, (name, info) in enumerate(doc.images.items()):
+        if not info.get('data'):
+            continue
+        fmt = image_format(f"x.{info.get('format', 'jpg')}")
+        href = f'images/img{index:04d}.{fmt}'
+        files[name] = (href, _MEDIA_TYPES.get(fmt, 'image/jpeg'), name == 'cover')
+    return files
 
 def _zpath(base: str, href: str) -> str:
     """Resolve an href against a directory inside the zip.
@@ -405,7 +439,10 @@ def _read_toc(zf, opf, ns: dict, manifest: dict, base_dir: str) -> List[Dict[str
             break
         nav_dir = posixpath.dirname(nav_path)
         for a in nav.find_all('a', href=True):
-            target, _, fragment = a['href'].partition('#')
+            href = a['href']
+            if isinstance(href, list):  # bs4 hands back a list for multi-valued attrs
+                href = href[0] if href else ''
+            target, _, fragment = href.partition('#')
             entries.append({'label': a.get_text().strip(),
                             'src': _zpath(nav_dir, target), 'fragment': unquote(fragment),
                             'level': max(len(a.find_parents('ol')) - 1, 0)})

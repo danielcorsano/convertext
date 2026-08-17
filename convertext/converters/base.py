@@ -34,7 +34,7 @@ class Document:
         `data` is the full plain text (used by plain writers); `runs`, when
         present, lets rich writers emit inline bold/italic spans.
         """
-        block = {"type": "paragraph", "data": text}
+        block: Dict[str, Any] = {"type": "paragraph", "data": text}
         if runs:
             block["runs"] = runs
         self.content.append(block)

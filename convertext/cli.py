@@ -2,7 +2,7 @@
 
 import click
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from convertext import __version__
 from convertext.config import Config
@@ -87,16 +87,16 @@ def main(
 
     if list_formats:
         registry = get_registry()
-        formats = registry.list_supported_formats()
-        if not formats:
+        supported = registry.list_supported_formats()
+        if not supported:
             click.echo("No converters registered yet.")
             return
         click.echo("Supported format conversions:\n")
-        for source, targets in sorted(formats.items()):
+        for source_fmt, targets in sorted(supported.items()):
             names = [t.upper() + (' (beta)' if t in BETA_OUTPUTS else '')
                      for t in sorted(set(targets))]
-            click.echo(f"  {source.upper()} → {', '.join(names)}")
-        if any(t in BETA_OUTPUTS for targets in formats.values() for t in targets):
+            click.echo(f"  {source_fmt.upper()} → {', '.join(names)}")
+        if any(t in BETA_OUTPUTS for targets in supported.values() for t in targets):
             click.echo("\n  (beta) = not yet reliable on all devices")
         return
 
@@ -113,14 +113,14 @@ def main(
     if config:
         cfg.override(cfg._load_yaml(Path(config)))
 
-    overrides = {}
+    overrides: Dict[str, Any] = {}
     if output:
         overrides['output'] = {'directory': output}
     if overwrite:
         overrides['output'] = overrides.get('output', {})
         overrides['output']['overwrite'] = True
 
-    formats = [f.strip().lower() for f in output_formats.split(',')]
+    target_formats = [f.strip().lower() for f in output_formats.split(',')]
     engine = ConversionEngine(cfg, keep_intermediate=keep_intermediate, overrides=overrides)
     source_files = [Path(f) for f in files]
     success_count = 0
@@ -132,7 +132,7 @@ def main(
         show_pos=True
     ) as bar:
         for source in bar:
-            for fmt in formats:
+            for fmt in target_formats:
                 result = engine.convert(source, fmt)
                 if result.success:
                     success_count += 1
@@ -141,7 +141,8 @@ def main(
                         if result.hops > 1 and result.conversion_path:
                             path_str = " → ".join(f.upper() for f in result.conversion_path)
                             hop_info = f" ({path_str}, {result.hops} hops)"
-                        click.echo(f"\n✓ {source.name} → {result.target_path.name}{hop_info}")
+                        target = result.target_path.name if result.target_path else fmt
+                        click.echo(f"\n✓ {source.name} → {target}{hop_info}")
                 else:
                     fail_count += 1
                     click.echo(f"\n✗ {source.name} → {fmt}: {result.error}")

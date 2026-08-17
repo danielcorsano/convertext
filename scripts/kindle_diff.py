@@ -16,13 +16,38 @@ Options:
 
 import argparse
 import re
+import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-CALIBRE = Path('/Applications/calibre.app/Contents/MacOS/ebook-convert')
+# Calibre ships its CLI outside PATH on macOS and Windows, so check PATH first
+# then the usual install locations. Absent Calibre only disables the reference.
+_CALIBRE_CANDIDATES = [
+    '/Applications/calibre.app/Contents/MacOS/ebook-convert',
+    '/usr/bin/ebook-convert',
+    '/usr/local/bin/ebook-convert',
+    '/opt/homebrew/bin/ebook-convert',
+    r'C:\Program Files\Calibre2\ebook-convert.exe',
+    r'C:\Program Files (x86)\Calibre2\ebook-convert.exe',
+]
+
+
+def find_calibre():
+    """Locate Calibre's ebook-convert, or None if it is not installed."""
+    found = shutil.which('ebook-convert')
+    if found:
+        return Path(found)
+    for candidate in _CALIBRE_CANDIDATES:
+        path = Path(candidate)
+        if path.exists():
+            return path
+    return None
+
+
+CALIBRE = find_calibre()
 
 INDX_FIELDS = [(0x08, 'type'), (0x0C, 'gen'), (0x10, 'unk_0x10'), (0x14, 'idxt_offset'),
                (0x18, 'data_records'), (0x1C, 'encoding'), (0x24, 'entry_count'),
@@ -145,8 +170,8 @@ def inspect(path: Path) -> dict:
 
 def build_reference(source: Path, fmt: str, out_dir: Path) -> Path:
     """Convert the source with Calibre to get a structural gold standard."""
-    if not CALIBRE.exists():
-        raise FileNotFoundError(f"Calibre CLI not found at {CALIBRE}")
+    if CALIBRE is None:
+        raise FileNotFoundError('Calibre CLI (ebook-convert) not found on this system')
     target = out_dir / f'reference.{fmt}'
     cmd = [str(CALIBRE), str(source), str(target)]
     if fmt == 'mobi':
@@ -214,7 +239,7 @@ def main() -> int:
 
         ours = inspect(ours_path)
         reference = None
-        if source and not args.no_reference and CALIBRE.exists():
+        if source and not args.no_reference and CALIBRE is not None:
             reference = inspect(build_reference(source, args.format, ours_path.parent))
 
         report(ours, reference)

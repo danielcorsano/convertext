@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 from lxml import etree
 
-from convertext.converters.readers import read_html, read_markdown, read_txt
+from convertext.converters.readers import read_source
 from convertext.converters.utils import escape_html
 from convertext.converters.base import BaseConverter, Document
 
@@ -196,15 +196,9 @@ class ToFB2Converter(BaseConverter):
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
         """Convert to FB2."""
-        source_fmt = source_path.suffix.lstrip('.').lower()
-
-        if source_fmt == 'txt':
-            doc = read_txt(source_path, config)
-        elif source_fmt in ['html', 'htm']:
-            doc = read_html(source_path, config)
-        elif source_fmt in ['md', 'markdown']:
-            doc = read_markdown(source_path, config)
-        else:
+        try:
+            doc = read_source(source_path, config)
+        except ValueError:
             return False
         self._apply_metadata_overrides(doc, source_path, config)
 

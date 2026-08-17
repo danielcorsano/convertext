@@ -1,7 +1,7 @@
 """ConverText - Lightweight universal text converter."""
 
 from pathlib import Path
-from typing import Union, Optional
+from typing import Any, Dict, Optional, Union
 
 __version__ = "0.3.0"
 
@@ -30,7 +30,7 @@ def convert(source: Union[str, Path], format: str, output: Optional[str] = None,
     load_converters()
     cfg = Config()
 
-    overrides = {'output': {}}
+    overrides: Dict[str, Any] = {'output': {}}
     if output:
         overrides['output']['directory'] = output
     if kwargs.get('overwrite'):

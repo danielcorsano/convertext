@@ -131,9 +131,13 @@ def test_headings_are_the_fallback_without_toc():
 
 # ── Writer: inline images ──────────────────────────────────────────────────────
 
-def test_image_block_renders_recindex_when_resolvable():
+def test_image_block_delegates_the_tag_to_the_writer():
+    # Each format spells an image reference differently, so the resolver returns
+    # the whole tag and the shared renderer stays format-agnostic.
     block = {'type': 'image', 'name': 'ch1.jpg'}
-    assert block_to_html(block, img_ref={'ch1.jpg': 6}.get) == '<img recindex="00006"></img>'
+    tags = {'ch1.jpg': '<img recindex="00006"></img>'}
+    assert block_to_html(block, img_ref=tags.get) == '<img recindex="00006"></img>'
+    assert block_to_html(block, img_ref={}.get) == ''  # unknown image: dropped
     assert block_to_html(block) == ''  # no resolver: dropped, as before
 
 
@@ -214,6 +218,50 @@ def test_docx_and_pdf_reach_mobi_directly():
     load_converters()
     for source in ('docx', 'pdf', 'html'):
         assert get_registry().find_conversion_path(source, 'mobi') == [source, 'mobi']
+
+
+def test_epub_output_embeds_images_and_round_trips():
+    """Images must survive into the EPUB package, since it is the multi-hop
+    intermediate — a writer that drops them loses them for every chained path."""
+    import zipfile
+    from convertext.converters.ebooks.epub import ToEpubConverter
+    doc = Document()
+    doc.metadata['title'] = 'T'
+    doc.images['cover'] = {'data': _jpeg_bytes(), 'format': 'jpg'}
+    doc.add_heading('Chapter', 1)
+    doc.add_image('inline.png', _jpeg_bytes(), 'png')
+    doc.add_paragraph('Body.')
+
+    with tempfile.TemporaryDirectory() as d:
+        out = Path(d) / 'book.epub'
+        assert ToEpubConverter()._create_epub(doc, out, {}, 'T') is True
+        with zipfile.ZipFile(out) as zf:
+            names = zf.namelist()
+            opf = zf.read('OEBPS/content.opf').decode()
+        assert len([n for n in names if n.startswith('OEBPS/images/')]) == 2
+        assert 'properties="cover-image"' in opf  # EPUB 3 cover
+        assert '<meta name="cover"' in opf        # EPUB 2 readers, incl. our own
+        assert 'media-type="image/png"' in opf
+
+        # Round-trip: our reader finds what our writer produced.
+        back = EpubConverter()._read_epub(out, {})
+        assert len(back.images) == 2
+        assert any(b['type'] == 'image' for b in back.content)
+
+
+def test_read_source_dispatches_every_supported_extension():
+    from convertext.converters.readers import read_source
+    assert read_source(EPUB, {}).toc, "epub should route to the EPUB reader"
+    with tempfile.TemporaryDirectory() as d:
+        txt = Path(d) / 'a.txt'
+        txt.write_text('Hello.')
+        assert read_source(txt).content
+        try:
+            read_source(Path(d) / 'a.xyz')
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('unsupported extension should raise ValueError')
 
 
 # ── End to end, and regressions on what already worked ────────────────────────

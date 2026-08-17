@@ -7,7 +7,7 @@ from io import BytesIO
 from reportlab.lib.pagesizes import A4, letter, legal
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
+from reportlab.lib.enums import TA_CENTER
 from reportlab.platypus import (
     SimpleDocTemplate,
     Paragraph,
@@ -15,7 +15,6 @@ from reportlab.platypus import (
     Table,
     TableStyle,
     Image,
-    PageBreak,
     ListFlowable,
     ListItem,
 )
@@ -23,7 +22,7 @@ from reportlab.lib import colors
 
 from convertext.converters.readers import read_html, read_txt
 from convertext.converters.base import BaseConverter, Document
-from convertext.converters.utils import escape_html, hex_to_rgb
+from convertext.converters.utils import escape_html
 
 class ToPdfConverter(BaseConverter):
     """Convert various formats to PDF using ReportLab."""

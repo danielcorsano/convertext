@@ -59,3 +59,11 @@ python_functions = ["test_*"]
 [build-system]
 requires = ["poetry-core>=2.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.mypy]
+python_version = "3.9"
+
+[[tool.mypy.overrides]]
+module = ["lxml.*", "markdown.*", "bs4.*", "pypdf.*", "docx.*", "PIL.*",
+          "reportlab.*", "yaml", "striprtf.*", "odf.*"]
+ignore_missing_imports = true

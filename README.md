@@ -14,10 +14,12 @@ Convert between all major text, document and ebook extensions with a single term
 PDF, DOCX, RTF, TXT, Markdown, HTML, EPUB, FB2
 
 **Kindle:**
-Write MOBI and AZW3/KF8 *(beta)* from TXT, HTML, Markdown, EPUB; read MOBI/AZW/AZW3 to TXT, HTML, Markdown
+Write MOBI and AZW3/KF8 *(beta)* from TXT, HTML, Markdown, EPUB, DOCX, PDF; read MOBI/AZW/AZW3 to TXT, HTML, Markdown
 
 > **AZW3 output is beta.** It is not yet reliable on all Kindle devices — prefer MOBI output for now.
-> Chapter navigation is still being implemented for both Kindle formats.
+
+MOBI output carries the source's own chapter navigation (`toc.ncx` / EPUB 3 nav), tappable
+chapter links, a Go To table of contents, cover thumbnail and inline images.
 
 **Read Only:**
 DOC, ODT
@@ -26,6 +28,7 @@ DOC, ODT
 
 - 🚀 **Fast & Lightweight** - Self-contained Python package (~25MB)
 - 📝 **Formatting Preservation** - Maintains bold, italic, tables, lists, colors across formats
+- 🖼️ **Images** - Inline images carried from EPUB, HTML (files and `data:` URIs), DOCX and PDF into EPUB and MOBI output
 - ⚙️ **Highly Configurable** - YAML config with priority merging
 - 🎯 **Simple and Scriptable CLI & API** - Intuitive command-line interface and built-in Python functions
 - 🔍 **Metadata Preservation** - Keeps author, title, and document properties
@@ -152,16 +155,20 @@ convertext ebook.epub --format html
 ConverText automatically finds conversion paths for unsupported direct conversions:
 
 ```bash
-# PDF → EPUB: Automatically converts via PDF → TXT → EPUB (2 hops)
-convertext book.pdf --format epub --verbose
-# Output: ✓ book.pdf → book.epub (PDF → TXT → EPUB, 2 hops)
+# DOC → EPUB: automatically converts via DOC → HTML → EPUB (2 hops)
+convertext report.doc --format epub --verbose
+# Output: ✓ report.doc → report.epub (DOC → HTML → EPUB, 2 hops)
 
 # Keep intermediate files for debugging
-convertext book.pdf --format epub --keep-intermediate
-# Creates: book_intermediate.txt, book.epub
+convertext report.doc --format epub --keep-intermediate
+# Creates: report_intermediate.html, report.epub
 ```
 
 **How it works**: Uses BFS pathfinding to find the shortest conversion chain (max 3 hops). Intermediate files are automatically cleaned up unless `--keep-intermediate` is specified.
+
+Structure-rich pairs are converted directly rather than chained, because every hop through an
+intermediate costs formatting and drops images. PDF, DOCX and EPUB all reach EPUB and MOBI in
+one hop for that reason.
 
 ### Format Matrix
 

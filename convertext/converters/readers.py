@@ -68,13 +68,16 @@ def file_image_resolver(base_dir: Path):
             except Exception:
                 return None
             subtype = header.split('/')[-1].split(';')[0]
-            name = f'data:{hashlib.md5(data).hexdigest()[:12]}'
+            # blake2b, not md5: fast, and md5 is unavailable on FIPS-locked hosts.
+            name = f'data:{hashlib.blake2b(data, digest_size=8).hexdigest()}'
             return name, data, image_format(f'x.{subtype}')
 
-        target = base_dir / unquote(href)
+        # Treat a rooted href as relative to the document, not to the filesystem.
+        relative = unquote(href).lstrip('/\\')
+        target = base_dir / relative
         try:
             data = target.read_bytes()
-        except Exception:
+        except (OSError, ValueError):
             return None
         return str(target), data, image_format(target.name)
 
@@ -187,6 +190,31 @@ def _pdf_page_to_blocks(text: str, doc: Document) -> None:
         else:
             para.append(line)
     flush()
+
+
+def read_source(path: Path, config: Optional[Dict[str, Any]] = None) -> Document:
+    """Read any supported source into a Document, dispatching on its extension.
+
+    Shared by every ebook writer so a source is read in place: each hop through
+    an intermediate writer costs structure and drops images. The EPUB and DOCX
+    readers are imported lazily because their modules import this one.
+    """
+    fmt = path.suffix.lstrip('.').lower()
+    if fmt == 'txt':
+        return read_txt(path, config)
+    if fmt in ('html', 'htm'):
+        return read_html(path, config)
+    if fmt in ('md', 'markdown'):
+        return read_markdown(path, config)
+    if fmt == 'pdf':
+        return read_pdf(path, config)
+    if fmt == 'epub':
+        from convertext.converters.ebooks.epub import EpubConverter
+        return EpubConverter()._read_epub(path, config or {})
+    if fmt == 'docx':
+        from convertext.converters.documents.docx import DocxConverter
+        return DocxConverter()._read_docx(path, config or {})
+    raise ValueError(f"Unsupported source format: {fmt}")
 
 
 def _paragraph_runs(el):

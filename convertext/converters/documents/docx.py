@@ -38,7 +38,7 @@ class DocxConverter(BaseConverter):
     def _read_docx(self, path: Path, config: Dict[str, Any]) -> Document:
         """Read DOCX into intermediate Document with full formatting."""
         doc = Document()
-        docx_doc = docx.Document(path)
+        docx_doc = docx.Document(str(path))
 
         core_props = docx_doc.core_properties
         doc.metadata = {
@@ -50,15 +50,16 @@ class DocxConverter(BaseConverter):
         for para in docx_doc.paragraphs:
             _add_para_images(para, docx_doc.part, doc)
 
-            if para.style.name.startswith('Heading'):
+            style = para.style.name if para.style is not None else ''
+            if style.startswith('Heading'):
                 try:
-                    level = int(para.style.name.replace('Heading ', ''))
+                    level = int(style.replace('Heading ', ''))
                 except ValueError:
                     level = 1
                 if para.text.strip():
                     doc.add_heading(para.text.strip(), level)
 
-            elif para.style.name.startswith('List'):
+            elif style.startswith('List'):
                 continue
 
             else:

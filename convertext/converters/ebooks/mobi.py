@@ -6,10 +6,10 @@ import struct
 import time
 from html import escape as _escape
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from convertext.converters.base import BaseConverter, Document
-from convertext.converters.readers import read_txt, read_html, read_markdown, read_pdf
+from convertext.converters.readers import read_source
 from convertext.converters.ebooks.palmdoc import (
     palmdoc_compress as _palmdoc_compress, FLIS as _FLIS, EOF as _EOF,
 )
@@ -40,28 +40,9 @@ class ToMobiConverter(BaseConverter):
         return ['mobi']
 
     def convert(self, source_path: Path, target_path: Path, config: Dict[str, Any]) -> bool:
-        doc = self._read_source(source_path, config)
+        doc = read_source(source_path, config)
         self._apply_metadata_overrides(doc, source_path, config)
         return _write_mobi(doc, target_path)
-
-    def _read_source(self, path: Path, config: Dict[str, Any]) -> Document:
-        """Read a source directly; every hop through an intermediate loses images."""
-        fmt = path.suffix.lstrip('.').lower()
-        if fmt == 'txt':
-            return read_txt(path, config)
-        elif fmt in ('html', 'htm'):
-            return read_html(path, config)
-        elif fmt in ('md', 'markdown'):
-            return read_markdown(path, config)
-        elif fmt == 'pdf':
-            return read_pdf(path, config)
-        elif fmt == 'epub':
-            from convertext.converters.ebooks.epub import EpubConverter
-            return EpubConverter()._read_epub(path, config)
-        elif fmt == 'docx':
-            from convertext.converters.documents.docx import DocxConverter
-            return DocxConverter()._read_docx(path, config)
-        raise ValueError(f"Unsupported source format: {fmt}")
 
 # ── MOBI v6 binary building ───────────────────────────────────────────────────
 
@@ -91,9 +72,9 @@ def _doc_to_html(doc: Document, img_ref=None) -> tuple:
     fixed-width placeholder first, so the byte offsets measured while building
     stay valid when the placeholders are patched with real targets.
     """
-    link_targets = []
-    anchor_offsets = {}
-    pending_anchors = []
+    link_targets: List[str] = []
+    anchor_offsets: Dict[str, int] = {}
+    pending_anchors: List[str] = []
 
     # Only link to targets that exist; anything else renders as plain text
     # rather than a tappable link that goes nowhere on the device.
@@ -207,7 +188,7 @@ def _toc_entries(doc: Document, anchor_offsets: dict, headings: list, html_len: 
     return entries
 
 def _build_exth(title: str, author: str, language: str = 'en',
-                metadata: dict = None, cover_offset: int = -1,
+                metadata: Optional[dict] = None, cover_offset: int = -1,
                 thumb_offset: int = -1, num_images: int = 0,
                 text_start: int = -1) -> bytes:
     """Build EXTH header block with metadata records."""
@@ -367,7 +348,12 @@ def _write_mobi(doc: Document, path: Path) -> bool:
     image_records, cover_off, thumb_off, recindex = _prepare_image_records(doc, inline=True)
     num_images = len(image_records)
 
-    html_str, toc_entries, text_start = _doc_to_html(doc, img_ref=recindex.get)
+    def img_tag(name):
+        """MOBI6 references an image by its 1-based index among the image records."""
+        index = recindex.get(name)
+        return f'<img recindex="{index:05d}"></img>' if index else None
+
+    html_str, toc_entries, text_start = _doc_to_html(doc, img_ref=img_tag)
     html_bytes = html_str.encode('utf-8')
 
     chunks = [html_bytes[i:i + 4096] for i in range(0, max(len(html_bytes), 1), 4096)]

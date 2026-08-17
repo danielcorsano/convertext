@@ -43,17 +43,17 @@ def _runs_html(runs: list, escape, link_ref) -> str:
 def block_to_html(block: dict, escape=None, img_ref=None, link_ref=None) -> str:
     """Render one content block to a Kindle-safe HTML fragment ('' if empty).
 
-    ``img_ref`` maps an image block's name to a MOBI recindex and ``link_ref``
-    maps a run's href to anchor attributes; without them images and links render
-    as before (dropped, and as plain text respectively).
+    ``img_ref`` maps an image block's name to a complete ``<img>`` tag (each
+    format spells the reference differently — MOBI uses ``recindex``, EPUB a
+    ``src`` path) and ``link_ref`` maps a run's href to anchor attributes.
+    Without them images and links render as before: dropped, and as plain text.
     """
     if escape is None:
         escape = _default_escape
     t = block.get('type')
 
     if t == 'image':
-        index = img_ref(block.get('name')) if img_ref else None
-        return f'<img recindex="{index:05d}"></img>' if index else ''
+        return (img_ref(block.get('name')) or '') if img_ref else ''
 
     if t == 'heading':
         level = block.get('level', 1)

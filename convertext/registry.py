@@ -42,8 +42,8 @@ class ConverterRegistry:
         return None
 
     def list_supported_formats(self) -> Dict[str, List[str]]:
-        """Return dict of source format -> list of target formats."""
-        return self._format_map.copy()
+        """Return dict of source format -> sorted list of target formats."""
+        return {source: sorted(targets) for source, targets in self._format_map.items()}
 
     def find_conversion_path(
         self,
