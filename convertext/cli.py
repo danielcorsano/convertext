@@ -103,11 +103,11 @@ def main(
     if not files:
         click.echo("Error: No input files specified")
         click.echo("Run 'convertext --help' for usage information")
-        return
+        raise SystemExit(2)
 
     if not output_formats:
         click.echo("Error: No output format specified (use --format)")
-        return
+        raise SystemExit(2)
 
     cfg = Config()
     if config:
